@@ -86,18 +86,22 @@ export class FluidSimulator {
         const positions = new Float32Array(this.parameters.particleCount * 3);
         const colors = new Float32Array(this.parameters.particleCount * 3);
 
-        // Distribute particles evenly on planet surface
+        // Calculate the area of planet surface to cover based on fluidSpread
+        const maxPhi = Math.PI * this.parameters.fluidSpread;
+        const phiStart = (Math.PI - maxPhi) / 2; // Center the fluid coverage
+
         for (let i = 0; i < this.parameters.particleCount; i++) {
-            // Generate random spherical coordinates
+            // Generate evenly distributed spherical coordinates
             const theta = Math.random() * 2 * Math.PI;  // Longitude (0 to 2π)
-            const phi = Math.acos(2 * Math.random() - 1);  // Latitude (0 to π)
+            const phi = phiStart + (Math.random() * maxPhi);  // Latitude (controlled by fluidSpread)
             
-            // Calculate position slightly above planet surface
+            // Calculate position exactly at planet surface + fluidHeight
             const radius = this.parameters.planetRadius + this.parameters.fluidHeight;
             const x = radius * Math.sin(phi) * Math.cos(theta);
             const y = radius * Math.sin(phi) * Math.sin(theta);
             const z = radius * Math.cos(phi);
 
+            // Create particle with zero initial velocity
             const particle = {
                 position: new THREE.Vector3(x, y, z),
                 velocity: new THREE.Vector3(0, 0, 0),
@@ -111,9 +115,10 @@ export class FluidSimulator {
             positions[i * 3 + 1] = y;
             positions[i * 3 + 2] = z;
 
-            colors[i * 3] = 0.0;
-            colors[i * 3 + 1] = 0.5;
-            colors[i * 3 + 2] = 1.0;
+            // Blue color for water particles
+            colors[i * 3] = 0.0;     // R
+            colors[i * 3 + 1] = 0.5; // G
+            colors[i * 3 + 2] = 1.0; // B
         }
 
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -326,6 +331,7 @@ export class FluidSimulator {
         return tangent;
     }
 }
+
 
 
 
