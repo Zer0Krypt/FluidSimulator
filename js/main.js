@@ -37,7 +37,17 @@ class SimulationApp {
 
     setupCamera() {
         this.camera.position.set(0, 5, 10);
+        this.camera.lookAt(0, 0, 0);
+    }
+
+    setupControls() {
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+        this.controls.enableDamping = true;
+        this.controls.dampingFactor = 0.05;
+        this.controls.screenSpacePanning = false;
+        this.controls.minDistance = 1;
+        this.controls.maxDistance = 50;
+        this.controls.maxPolarAngle = Math.PI / 2;
     }
 
     setupLights() {
@@ -49,6 +59,7 @@ class SimulationApp {
 
     animate() {
         requestAnimationFrame(() => this.animate());
+        this.controls.update();
         this.fluidSimulator.update();
         this.renderer.render(this.scene, this.camera);
     }
