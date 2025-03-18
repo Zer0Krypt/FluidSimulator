@@ -3,12 +3,8 @@ const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http);
 
-// Serve static files from public directory
-app.use(express.static('public'));
-
-// Serve Three.js files from node_modules
-app.use('/js/lib', express.static('node_modules/three/build/'));
-app.use('/js/lib', express.static('node_modules/three/examples/jsm/controls/'));
+// Serve the built files from the dist directory
+app.use(express.static('dist'));
 
 io.on('connection', (socket) => {
     console.log('User connected');
@@ -26,3 +22,4 @@ const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
