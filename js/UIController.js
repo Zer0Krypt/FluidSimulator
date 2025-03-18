@@ -93,10 +93,16 @@ export class UIController {
     loadScenario(seed) {
         const scenario = this.app.scenarioManager.loadScenario(seed);
         if (scenario) {
+            // Update simulator parameters
             Object.entries(scenario.parameters).forEach(([name, value]) => {
                 this.app.fluidSimulator.setParameter(name, value);
                 this.updateControlValue(name, value);
             });
+            
+            // Reset simulation with new parameters
+            this.app.fluidSimulator.initializeParticles();
+        } else {
+            console.warn('Failed to load scenario. Using default parameters.');
         }
     }
 
@@ -108,3 +114,4 @@ export class UIController {
         }
     }
 }
+

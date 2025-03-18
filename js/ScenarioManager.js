@@ -20,6 +20,7 @@ export class ScenarioManager {
     loadScenario(seed) {
         try {
             const scenarioData = this.decodeSeed(seed);
+            this.validateScenarioData(scenarioData);
             this.currentScenario = scenarioData;
             return scenarioData;
         } catch (error) {
@@ -36,12 +37,7 @@ export class ScenarioManager {
         try {
             // Base64 decode and parse JSON
             const decodedString = atob(seed);
-            const scenarioData = JSON.parse(decodedString);
-            
-            // Validate scenario data
-            this.validateScenarioData(scenarioData);
-            
-            return scenarioData;
+            return JSON.parse(decodedString);
         } catch (error) {
             throw new Error('Invalid scenario seed');
         }
@@ -61,26 +57,30 @@ export class ScenarioManager {
     }
 
     validateScenarioData(scenario) {
+        if (!scenario || typeof scenario !== 'object') {
+            throw new Error('Invalid scenario data: must be an object');
+        }
+
+        // Check for required properties
         const requiredProperties = ['parameters', 'objects', 'forces'];
-        requiredProperties.forEach(prop => {
+        for (const prop of requiredProperties) {
             if (!(prop in scenario)) {
                 throw new Error(`Missing required property: ${prop}`);
             }
-        });
-    }
-
-    addObject(object) {
-        if (!this.currentScenario) {
-            this.currentScenario = this.createDefaultScenario();
         }
-        this.currentScenario.objects.push(object);
-    }
 
-    addForce(force) {
-        if (!this.currentScenario) {
-            this.currentScenario = this.createDefaultScenario();
+        // Validate parameters
+        if (typeof scenario.parameters !== 'object') {
+            throw new Error('Invalid parameters: must be an object');
         }
-        this.currentScenario.forces.push(force);
+
+        // Validate arrays
+        if (!Array.isArray(scenario.objects)) {
+            throw new Error('Invalid objects: must be an array');
+        }
+        if (!Array.isArray(scenario.forces)) {
+            throw new Error('Invalid forces: must be an array');
+        }
     }
 
     createDefaultScenario() {
@@ -98,3 +98,4 @@ export class ScenarioManager {
         };
     }
 }
+
