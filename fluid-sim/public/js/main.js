@@ -1,5 +1,5 @@
-import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import * as THREE from '/js/lib/three.module.js';
+import { OrbitControls } from '/js/lib/OrbitControls.js';
 
 class Particle {
     constructor(position, mass = 1.0) {
