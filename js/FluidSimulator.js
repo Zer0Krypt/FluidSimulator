@@ -47,8 +47,12 @@ export class FluidSimulator {
         const material = new THREE.MeshPhongMaterial({ color: 0x888888 });
         const moon = new THREE.Mesh(geometry, material);
         
-        // Set initial position
-        this.updateMoonPosition(this.parameters.moonInitialAngle);
+        // Calculate initial position directly instead of using updateMoonPosition
+        const angle = this.parameters.moonInitialAngle;
+        const x = Math.cos(angle) * this.parameters.moonOrbitRadius;
+        const z = Math.sin(angle) * this.parameters.moonOrbitRadius;
+        moon.position.set(x, 0, z);
+        
         return moon;
     }
 
@@ -192,4 +196,5 @@ export class FluidSimulator {
         };
     }
 }
+
 
