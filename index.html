@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fluid Physics Simulator</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div id="simulator-container">
+        <canvas id="simulation-canvas"></canvas>
+        <div id="control-panel">
+            <div id="scenario-controls">
+                <h3>Scenario Settings</h3>
+                <button id="play-pause">Play</button>
+                <button id="reset">Reset</button>
+                <input type="text" id="seed" placeholder="Simulation Seed">
+            </div>
+            <div id="physics-controls">
+                <!-- Controls will be dynamically populated -->
+            </div>
+        </div>
+    </div>
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
