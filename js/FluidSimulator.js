@@ -146,13 +146,30 @@ export class FluidSimulator {
             
             // Calculate gravitational forces with increased moon influence
             const planetForce = this.calculateGravitationalForce(particle.position, this.parameters.planetMass, this.planet.position, 1.0);
-            const moonForce = this.calculateGravitationalForce(particle.position, this.parameters.moonMass, this.moon.position, 5.0); // Increased moon influence
+            const moonForce = this.calculateGravitationalForce(particle.position, this.parameters.moonMass, this.moon.position, 5.0);
             
-            // Add surface tension force to keep particles near planet surface
+            // Calculate distance to planet center
             const toCenter = this.planet.position.clone().sub(particle.position);
             const distanceToCenter = toCenter.length();
+            
+            // Check for collision with planet surface
+            if (distanceToCenter < this.parameters.planetRadius) {
+                // Move particle back to surface
+                const normal = toCenter.normalize();
+                particle.position.copy(this.planet.position.clone().sub(normal.multiplyScalar(this.parameters.planetRadius)));
+                
+                // Calculate reflection vector for velocity
+                const dot = particle.velocity.dot(normal);
+                const reflection = normal.multiplyScalar(2 * dot);
+                particle.velocity.sub(reflection);
+                
+                // Add friction and damping on collision
+                particle.velocity.multiplyScalar(0.8);
+            }
+            
+            // Add surface tension force to keep particles near planet surface
             const targetRadius = this.parameters.planetRadius + this.parameters.fluidHeight;
-            const surfaceForceMagnitude = (distanceToCenter - targetRadius) * 5.0; // Reduced to allow more moon influence
+            const surfaceForceMagnitude = (distanceToCenter - targetRadius) * 5.0;
             const surfaceForce = toCenter.normalize().multiplyScalar(surfaceForceMagnitude);
             
             // Combine all forces
@@ -164,7 +181,7 @@ export class FluidSimulator {
             particle.velocity.multiplyScalar(0.995);
             
             // Update velocity and position
-            const scaledDeltaTime = deltaTime * 0.2; // Increased time step slightly
+            const scaledDeltaTime = deltaTime * 0.2;
             particle.velocity.add(totalForce.multiplyScalar(scaledDeltaTime));
             particle.position.add(particle.velocity.clone().multiplyScalar(scaledDeltaTime));
 
@@ -247,6 +264,7 @@ export class FluidSimulator {
         return this.particleSystem;
     }
 }
+
 
 
 
