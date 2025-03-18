@@ -209,24 +209,66 @@ class FluidSimulation {
     }
     
     setupControls() {
+        // Play/Pause controls
         document.getElementById('play').onclick = () => this.isPlaying = true;
         document.getElementById('pause').onclick = () => this.isPlaying = false;
         
-        const timeScaleSlider = document.getElementById('timeScale');
-        timeScaleSlider.oninput = (e) => {
-            this.timeScale = e.target.value;
-            document.getElementById('timeScaleValue').textContent = `${this.timeScale}x`;
+        // Reset button
+        document.getElementById('reset').onclick = () => {
+            this.particles.forEach(particle => this.scene.remove(particle.mesh));
+            this.particles = [];
+            this.createInitialParticles(parseInt(document.getElementById('particleCount').value));
         };
         
+        // Share button
         document.getElementById('share').onclick = () => {
             const seed = this.generateSimulationSeed();
             // Implement sharing functionality
         };
+
+        // Setup all sliders
+        this.setupSlider('timeScale', 'timeScaleValue', 'x', value => this.timeScale = parseFloat(value));
+        this.setupSlider('particleCount', 'particleCountValue', '', value => {
+            if (!this.isPlaying) {
+                this.particles.forEach(particle => this.scene.remove(particle.mesh));
+                this.particles = [];
+                this.createInitialParticles(parseInt(value));
+            }
+        });
+        this.setupSlider('smoothingLength', 'smoothingLengthValue', '', value => this.smoothingLength = parseFloat(value));
+        this.setupSlider('targetDensity', 'targetDensityValue', '', value => this.targetDensity = parseFloat(value));
+        this.setupSlider('pressureConstant', 'pressureConstantValue', '', value => this.pressureConstant = parseFloat(value));
+        this.setupSlider('viscosity', 'viscosityValue', '', value => this.viscosity = parseFloat(value));
+        this.setupSlider('gravity', 'gravityValue', '', value => this.gravity.y = parseFloat(value));
+        this.setupSlider('boundaryDamping', 'boundaryDampingValue', '', value => this.boundaryDamping = parseFloat(value));
+    }
+
+    setupSlider(sliderId, valueId, suffix = '', callback) {
+        const slider = document.getElementById(sliderId);
+        const valueDisplay = document.getElementById(valueId);
+        
+        // Set initial value
+        valueDisplay.textContent = slider.value + suffix;
+        
+        // Update on change
+        slider.oninput = (e) => {
+            const value = e.target.value;
+            valueDisplay.textContent = value + suffix;
+            callback(value);
+        };
     }
     
     generateSimulationSeed() {
-        // Implement seed generation based on current simulation parameters
-        return Math.random().toString(36).substring(7);
+        return {
+            timeScale: this.timeScale,
+            particleCount: this.particles.length,
+            smoothingLength: this.smoothingLength,
+            targetDensity: this.targetDensity,
+            pressureConstant: this.pressureConstant,
+            viscosity: this.viscosity,
+            gravity: this.gravity.y,
+            boundaryDamping: this.boundaryDamping
+        };
     }
     
     animate() {
@@ -250,3 +292,4 @@ class FluidSimulation {
 }
 
 const simulation = new FluidSimulation();
+
