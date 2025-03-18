@@ -2,8 +2,8 @@ import * as THREE from 'three';
 
 export class FluidSimulator {
     constructor() {
-        this.particles = [];
-        this.parameters = {
+        // Store default parameters
+        this.defaultParameters = {
             // Planet parameters
             planetRadius: 5.0,
             planetMass: 1000.0,
@@ -29,6 +29,9 @@ export class FluidSimulator {
             timeScale: 1.0,
             scale: 1.0
         };
+
+        // Clone default parameters for current use
+        this.parameters = { ...this.defaultParameters };
 
         this.planet = this.createPlanet();
         this.moon = this.createMoon();
@@ -355,5 +358,29 @@ export class FluidSimulator {
             .normalize();
         
         return tangent;
+    }
+
+    resetToDefault() {
+        // Reset moon position
+        this.updateMoonPosition(this.defaultParameters.moonInitialAngle);
+        
+        // Reset all parameters to defaults
+        Object.entries(this.defaultParameters).forEach(([key, value]) => {
+            this.setParameter(key, value);
+        });
+        
+        // Reset particle system to initial state
+        if (this.particleSystem) {
+            this.particleSystem.geometry.dispose();
+            this.particleSystem.material.dispose();
+        }
+        
+        // Reinitialize particles with default configuration
+        this.initializeParticles();
+        
+        // Notify main app about the new particle system
+        if (this.onParticleSystemUpdate) {
+            this.onParticleSystemUpdate(this.particleSystem);
+        }
     }
 }

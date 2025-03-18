@@ -227,10 +227,18 @@ export class UIController {
             this.toggleSimulation();
         }
         
-        // Reset particles
-        this.app.fluidSimulator.initializeParticles(
-            this.app.fluidSimulator.parameters.particleCount
-        );
+        // Reset all controls to their default values
+        Object.entries(this.app.fluidSimulator.parameters).forEach(([name, value]) => {
+            const control = document.querySelector(`input[data-param="${name}"]`);
+            if (control && control.dataset.default) {
+                const defaultValue = parseFloat(control.dataset.default);
+                this.app.fluidSimulator.setParameter(name, defaultValue);
+                this.updateControlValue(name, defaultValue);
+            }
+        });
+        
+        // Reset particles to initial state
+        this.app.fluidSimulator.resetToDefault();
         
         // Resume if it was playing
         if (wasPlaying) {
@@ -277,6 +285,7 @@ export class UIController {
         }
     }
 }
+
 
 
 
