@@ -2,5 +2,6 @@
 
 git clean -fd
 gh repo sync
-npm install
-npm start
+npm run dev
+#npm install
+#npm start
