@@ -205,7 +205,31 @@ export class FluidSimulator {
             }
             if (['planetRadius'].includes(name)) {
                 this.planet.geometry = new THREE.SphereGeometry(this.parameters.planetRadius, 32, 32);
-                this.initializeParticles();
+                
+                // Instead of full reinitialization, adjust particle positions relative to new radius
+                const radiusRatio = this.parameters.planetRadius / (this.parameters.planetRadius - value);
+                const positions = this.particleSystem.geometry.attributes.position.array;
+                
+                for (let i = 0; i < this.particles.length; i++) {
+                    const particle = this.particles[i];
+                    
+                    // Calculate new position maintaining relative height above surface
+                    const direction = particle.position.clone().normalize();
+                    const newRadius = this.parameters.planetRadius + this.parameters.fluidHeight;
+                    particle.position.copy(direction.multiplyScalar(newRadius));
+                    
+                    // Update geometry
+                    positions[i * 3] = particle.position.x;
+                    positions[i * 3 + 1] = particle.position.y;
+                    positions[i * 3 + 2] = particle.position.z;
+                    
+                    // Maintain current velocity direction but scale magnitude
+                    if (particle.velocity) {
+                        particle.velocity.multiplyScalar(0.5); // Dampen velocities during radius change
+                    }
+                }
+                
+                this.particleSystem.geometry.attributes.position.needsUpdate = true;
             }
         }
     }
@@ -223,6 +247,7 @@ export class FluidSimulator {
         return this.particleSystem;
     }
 }
+
 
 
 
