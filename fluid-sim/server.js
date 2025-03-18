@@ -3,7 +3,12 @@ const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http);
 
+// Serve static files from public directory
 app.use(express.static('public'));
+
+// Serve Three.js files from node_modules
+app.use('/js/lib', express.static('node_modules/three/build/'));
+app.use('/js/lib', express.static('node_modules/three/examples/jsm/controls/'));
 
 io.on('connection', (socket) => {
     console.log('User connected');
