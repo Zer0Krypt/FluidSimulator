@@ -179,7 +179,7 @@ export class FluidSimulator {
                 
                 // Add random tangential velocity for distribution
                 const randomTangent = this.getRandomTangentialVector(normal);
-                const distributionSpeed = 0.1; // Adjust this value to control spread speed
+                const distributionSpeed = 0.1;
                 
                 // Combine velocities
                 particle.velocity.copy(tangentialVel)
@@ -192,15 +192,25 @@ export class FluidSimulator {
                 // Apply friction to prevent excessive speeds
                 particle.velocity.multiplyScalar(0.95);
             }
-            // Handle planet collisions
-            else if (distanceToPlanet < this.parameters.planetRadius) {
+            // Handle planet surface interaction
+            else if (distanceToPlanet < this.parameters.planetRadius + this.parameters.fluidHeight) {
                 const normal = toPlanet.normalize();
-                particle.position.copy(this.planet.position.clone().sub(normal.multiplyScalar(this.parameters.planetRadius)));
                 
-                // Project velocity onto surface plane
+                // Keep particles at surface level
+                const targetRadius = this.parameters.planetRadius + this.parameters.fluidHeight;
+                particle.position.copy(this.planet.position.clone().add(normal.multiplyScalar(targetRadius)));
+                
+                // Project velocity along surface
                 const normalVelocity = normal.multiplyScalar(particle.velocity.dot(normal));
                 const tangentialVelocity = particle.velocity.clone().sub(normalVelocity);
-                particle.velocity.copy(tangentialVelocity.multiplyScalar(0.8));
+                
+                // Maintain only tangential velocity component with high damping
+                particle.velocity.copy(tangentialVelocity.multiplyScalar(0.98));
+                
+                // Add a small circular motion component to simulate ocean currents
+                const rotationAxis = new THREE.Vector3(0, 1, 0);
+                const tangentDir = new THREE.Vector3().crossVectors(normal, rotationAxis).normalize();
+                particle.velocity.add(tangentDir.multiplyScalar(0.02));
             }
             
             // Calculate surface tension and distribution forces
@@ -211,16 +221,10 @@ export class FluidSimulator {
                 const targetRadius = this.parameters.moonRadius + (this.parameters.fluidHeight * 0.2);
                 const surfaceForceMagnitude = (distanceToMoon - targetRadius) * 0.8;
                 surfaceForce.add(toMoon.normalize().multiplyScalar(surfaceForceMagnitude));
-                
-                // Add distribution force along moon surface
-                if (distanceToMoon < this.parameters.moonRadius * 1.2) {
-                    const tangent = this.getRandomTangentialVector(toMoon.normalize());
-                    surfaceForce.add(tangent.multiplyScalar(0.1));
-                }
             } else {
-                // Planet surface tension
+                // Planet surface tension - gentler for ocean-like behavior
                 const targetRadius = this.parameters.planetRadius + this.parameters.fluidHeight;
-                const surfaceForceMagnitude = (distanceToPlanet - targetRadius) * 0.8;
+                const surfaceForceMagnitude = (distanceToPlanet - targetRadius) * 0.3;
                 surfaceForce.add(toPlanet.normalize().multiplyScalar(surfaceForceMagnitude));
             }
             
@@ -229,10 +233,10 @@ export class FluidSimulator {
                 .add(moonForce)
                 .add(surfaceForce);
             
-            // Update velocity and position
-            const scaledDeltaTime = deltaTime * 0.1;
+            // Update velocity and position with gentler physics
+            const scaledDeltaTime = deltaTime * 0.08; // Reduced time scale for smoother motion
             particle.velocity.add(totalForce.multiplyScalar(scaledDeltaTime));
-            particle.velocity.multiplyScalar(0.99); // Damping
+            particle.velocity.multiplyScalar(0.995); // Gentle damping
             particle.position.add(particle.velocity.clone().multiplyScalar(scaledDeltaTime));
 
             // Update geometry
@@ -331,6 +335,7 @@ export class FluidSimulator {
         return tangent;
     }
 }
+
 
 
 
