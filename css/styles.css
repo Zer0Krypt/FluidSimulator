@@ -56,3 +56,16 @@ body {
     color: #666;
     font-size: 0.9em;
 }
+
+.control-item label,
+.control-item input,
+.control-item .range-info {
+    cursor: help;
+}
+
+.control-item label:hover,
+.control-item input:hover,
+.control-item .range-info:hover {
+    opacity: 0.8;
+}
+

@@ -36,24 +36,120 @@ export class UIController {
         
         const controlGroups = {
             planet: [
-                { name: 'planetRadius', min: 1, max: 10, step: 0.1, default: 5.0, label: 'Planet Radius' },
-                { name: 'planetMass', min: 100, max: 10000, step: 100, default: 1000.0, label: 'Planet Mass' }
+                { 
+                    name: 'planetRadius', 
+                    min: 1, 
+                    max: 10, 
+                    step: 0.1, 
+                    default: 5.0, 
+                    label: 'Planet Radius',
+                    tooltip: 'Size of the planet. Larger values create a bigger planet, smaller values create a more compact planet.'
+                },
+                { 
+                    name: 'planetMass', 
+                    min: 100, 
+                    max: 10000, 
+                    step: 100, 
+                    default: 1000.0, 
+                    label: 'Planet Mass',
+                    tooltip: 'Mass of the planet. Higher values create stronger gravitational pull, lower values allow particles to float more freely.'
+                }
             ],
             moon: [
-                { name: 'moonRadius', min: 0.1, max: 5, step: 0.1, default: 1.0, label: 'Moon Radius' },
-                { name: 'moonMass', min: 10, max: 1000, step: 10, default: 100.0, label: 'Moon Mass' },
-                { name: 'moonOrbitRadius', min: 8, max: 30, step: 0.5, default: 15.0, label: 'Orbit Radius' },
-                { name: 'moonOrbitalSpeed', min: 0.1, max: 2.0, step: 0.1, default: 0.5, label: 'Orbital Speed' }
+                { 
+                    name: 'moonRadius', 
+                    min: 0.1, 
+                    max: 5, 
+                    step: 0.1, 
+                    default: 1.0, 
+                    label: 'Moon Radius',
+                    tooltip: 'Size of the moon. Larger values create a bigger moon, smaller values create a more compact moon.'
+                },
+                { 
+                    name: 'moonMass', 
+                    min: 10, 
+                    max: 1000, 
+                    step: 10, 
+                    default: 100.0, 
+                    label: 'Moon Mass',
+                    tooltip: 'Mass of the moon. Higher values create stronger tidal forces, lower values reduce the moon\'s influence on fluid particles.'
+                },
+                { 
+                    name: 'moonOrbitRadius', 
+                    min: 8, 
+                    max: 30, 
+                    step: 0.5, 
+                    default: 15.0, 
+                    label: 'Orbit Radius',
+                    tooltip: 'Distance between moon and planet. Larger values place the moon further away (weaker influence), smaller values bring it closer (stronger influence).'
+                },
+                { 
+                    name: 'moonOrbitalSpeed', 
+                    min: 0.1, 
+                    max: 2.0, 
+                    step: 0.1, 
+                    default: 0.5, 
+                    label: 'Orbital Speed',
+                    tooltip: 'Speed of moon\'s orbit. Higher values make the moon orbit faster, lower values create slower orbits.'
+                }
             ],
             fluid: [
-                { name: 'particleCount', min: 100, max: 10000, step: 100, default: 1000, label: 'Particle Count' },
-                { name: 'fluidHeight', min: 0.1, max: 2.0, step: 0.1, default: 0.5, label: 'Fluid Height' },
-                { name: 'fluidSpread', min: 0.1, max: 1.0, step: 0.1, default: 0.8, label: 'Fluid Coverage' },
-                { name: 'viscosity', min: 0.1, max: 10.0, step: 0.1, default: 1.0, label: 'Fluid Viscosity' }
+                { 
+                    name: 'particleCount', 
+                    min: 100, 
+                    max: 10000, 
+                    step: 100, 
+                    default: 1000, 
+                    label: 'Particle Count',
+                    tooltip: 'Number of fluid particles. More particles create smoother fluid simulation but may impact performance.'
+                },
+                { 
+                    name: 'fluidHeight', 
+                    min: 0.1, 
+                    max: 2.0, 
+                    step: 0.1, 
+                    default: 0.5, 
+                    label: 'Fluid Height',
+                    tooltip: 'Height of fluid above planet surface. Larger values create deeper oceans, smaller values create shallower seas.'
+                },
+                { 
+                    name: 'fluidSpread', 
+                    min: 0.1, 
+                    max: 1.0, 
+                    step: 0.1, 
+                    default: 0.8, 
+                    label: 'Fluid Coverage',
+                    tooltip: 'How much of planet surface is covered by fluid. Higher values cover more surface area, lower values concentrate fluid more.'
+                },
+                { 
+                    name: 'viscosity', 
+                    min: 0.1, 
+                    max: 10.0, 
+                    step: 0.1, 
+                    default: 1.0, 
+                    label: 'Fluid Viscosity',
+                    tooltip: 'Thickness of the fluid. Higher values make fluid more honey-like, lower values make it more water-like.'
+                }
             ],
             simulation: [
-                { name: 'timeScale', min: 0.1, max: 10.0, step: 0.1, default: 1.0, label: 'Time Scale' },
-                { name: 'gravitationalConstant', min: 1e-12, max: 1e-10, step: 1e-12, default: 6.67430e-11, label: 'G Constant' }
+                { 
+                    name: 'timeScale', 
+                    min: 0.1, 
+                    max: 10.0, 
+                    step: 0.1, 
+                    default: 1.0, 
+                    label: 'Time Scale',
+                    tooltip: 'Speed of simulation. Higher values make simulation run faster, lower values slow it down.'
+                },
+                { 
+                    name: 'gravitationalConstant', 
+                    min: 1e-12, 
+                    max: 1e-10, 
+                    step: 1e-12, 
+                    default: 6.67430e-11, 
+                    label: 'G Constant',
+                    tooltip: 'Strength of gravitational forces. Higher values create stronger gravity effects, lower values weaken gravitational influence.'
+                }
             ]
         };
 
@@ -69,7 +165,8 @@ export class UIController {
                 container.className = 'control-item';
                 
                 const label = document.createElement('label');
-                label.textContent = control.name;
+                label.textContent = control.label;
+                label.title = control.tooltip; // Add tooltip to label
                 
                 const input = document.createElement('input');
                 input.type = 'number';
@@ -79,11 +176,13 @@ export class UIController {
                 input.value = control.default;
                 input.className = 'number-input';
                 input.setAttribute('data-param', control.name);
+                input.title = control.tooltip; // Add tooltip to input
                 
                 // Add min/max display
                 const rangeInfo = document.createElement('span');
                 rangeInfo.className = 'range-info';
                 rangeInfo.textContent = `(${control.min} - ${control.max})`;
+                rangeInfo.title = control.tooltip; // Add tooltip to range info
 
                 input.addEventListener('change', (e) => {
                     let value = parseFloat(e.target.value);
@@ -178,6 +277,8 @@ export class UIController {
         }
     }
 }
+
+
 
 
 
