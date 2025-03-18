@@ -2,11 +2,6 @@ import * as THREE from 'three';
 
 export class FluidSimulator {
     constructor() {
-        // Add color definitions
-        this.particleBaseColor = new THREE.Color(0x0080FF);  // Blue water
-        this.planetColor = new THREE.Color(0x44aa44);        // Green planet
-        this.moonColor = new THREE.Color(0x800080);          // Purple moon
-
         // Store default parameters
         this.defaultParameters = {
             // Planet parameters
@@ -137,63 +132,62 @@ export class FluidSimulator {
     }
 
     initializeParticles() {
-        const geometry = new THREE.BufferGeometry();
         this.particles = [];
-
-        // Create positions and colors arrays
+        const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(this.parameters.particleCount * 3);
-        const colorArray = new Float32Array(this.parameters.particleCount * 3);
+        const colors = new Float32Array(this.parameters.particleCount * 3);
 
-        // Initialize particles around the planet
+        // Calculate the area of planet surface to cover based on fluidSpread
+        const maxPhi = Math.PI * this.parameters.fluidSpread;
+        const phiStart = (Math.PI - maxPhi) / 2; // Center the fluid coverage
+
         for (let i = 0; i < this.parameters.particleCount; i++) {
-            // Create particle with random position on planet surface
-            const particle = {
-                position: new THREE.Vector3(
-                    (Math.random() - 0.5) * 2,
-                    (Math.random() - 0.5) * 2,
-                    (Math.random() - 0.5) * 2
-                ).normalize().multiplyScalar(this.parameters.planetRadius + this.parameters.fluidHeight),
-                velocity: new THREE.Vector3(0, 0, 0)
-            };
+            // Generate evenly distributed spherical coordinates
+            const theta = Math.random() * 2 * Math.PI;  // Longitude (0 to 2π)
+            const phi = phiStart + (Math.random() * maxPhi);  // Latitude (controlled by fluidSpread)
             
+            // Calculate position exactly at planet surface + fluidHeight
+            const radius = this.parameters.planetRadius + this.parameters.fluidHeight;
+            const x = radius * Math.sin(phi) * Math.cos(theta);
+            const y = radius * Math.sin(phi) * Math.sin(theta);
+            const z = radius * Math.cos(phi);
+
+            // Create particle with zero initial velocity
+            const particle = {
+                position: new THREE.Vector3(x, y, z),
+                velocity: new THREE.Vector3(0, 0, 0),
+                density: 0,
+                pressure: 0
+            };
             this.particles.push(particle);
 
-            // Set initial positions
-            positions[i * 3] = particle.position.x;
-            positions[i * 3 + 1] = particle.position.y;
-            positions[i * 3 + 2] = particle.position.z;
+            // Set positions and colors
+            positions[i * 3] = x;
+            positions[i * 3 + 1] = y;
+            positions[i * 3 + 2] = z;
 
-            // Set initial colors to base water color
-            colorArray[i * 3] = this.particleBaseColor.r;
-            colorArray[i * 3 + 1] = this.particleBaseColor.g;
-            colorArray[i * 3 + 2] = this.particleBaseColor.b;
+            // Blue color for water particles
+            colors[i * 3] = 0.0;     // R
+            colors[i * 3 + 1] = 0.5; // G
+            colors[i * 3 + 2] = 1.0; // B
         }
 
-        // Set attributes
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        geometry.setAttribute('color', new THREE.BufferAttribute(colorArray, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-        // Create material with vertex colors enabled
         const material = new THREE.PointsMaterial({
             size: this.parameters.particleSize,
-            vertexColors: true,
+            vertexColors: true,  // Make sure this is true
             transparent: true,
             opacity: 0.8,
-            sizeAttenuation: true,
-            blending: THREE.AdditiveBlending
+            sizeAttenuation: true
         });
 
-        // Create particle system
         this.particleSystem = new THREE.Points(geometry, material);
     }
 
     update() {
         const deltaTime = this.parameters.timeScale * 0.016;
-        const scaledDeltaTime = deltaTime * 0.08;
-
-        // Get geometry attributes
-        const positions = this.particleSystem.geometry.attributes.position.array;
-        const colors = this.particleSystem.geometry.attributes.color;
 
         // Update rotations
         this.parameters.planetRotationAngle += this.parameters.planetRotationSpeed * deltaTime;
@@ -203,70 +197,114 @@ export class FluidSimulator {
         this.planet.rotation.y = this.parameters.planetRotationAngle;
         this.moon.rotation.y = this.parameters.moonRotationAngle;
 
-        // Reuse vectors to avoid garbage collection
-        const toPlanet = new THREE.Vector3();
-        const toMoon = new THREE.Vector3();
-        const tempForce = new THREE.Vector3();
+        // Update moon orbital position
+        if (this.frameCount % 3 === 0) {
+            const currentAngle = Math.atan2(this.moon.position.z, this.moon.position.x);
+            const newAngle = currentAngle + this.parameters.moonOrbitalSpeed * deltaTime * 3;
+            this.updateMoonPosition(newAngle);
+        }
 
+        // Optimize neighborhood calculation using spatial partitioning
+        const positions = this.particleSystem.geometry.attributes.position.array;
+        const gridSize = this.parameters.surfaceTensionRadius;
+        const spatialGrid = new Map();
+        
+        // First pass: Build spatial grid
         for (let i = 0; i < this.particles.length; i++) {
             const particle = this.particles[i];
-            tempForce.set(0, 0, 0);
+            const gridX = Math.floor(particle.position.x / gridSize);
+            const gridY = Math.floor(particle.position.y / gridSize);
+            const gridZ = Math.floor(particle.position.z / gridSize);
+            const gridKey = `${gridX},${gridY},${gridZ}`;
             
-            // Calculate vectors to planet and moon
+            if (!spatialGrid.has(gridKey)) {
+                spatialGrid.set(gridKey, []);
+            }
+            spatialGrid.get(gridKey).push(i);
+        }
+
+        // Second pass: Update particles
+        const scaledDeltaTime = deltaTime * 0.08;
+        
+        for (let i = 0; i < this.particles.length; i++) {
+            const particle = this.particles[i];
+            
+            // Get nearby grid cells
+            const gridX = Math.floor(particle.position.x / gridSize);
+            const gridY = Math.floor(particle.position.y / gridSize);
+            const gridZ = Math.floor(particle.position.z / gridSize);
+            
+            const neighbors = [];
+            
+            // Check only neighboring cells
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dz = -1; dz <= 1; dz++) {
+                        const key = `${gridX + dx},${gridY + dy},${gridZ + dz}`;
+                        const cellParticles = spatialGrid.get(key) || [];
+                        
+                        for (const j of cellParticles) {
+                            if (i === j) continue;
+                            
+                            const neighbor = this.particles[j];
+                            const distance = particle.position.distanceTo(neighbor.position);
+                            
+                            if (distance < this.parameters.surfaceTensionRadius) {
+                                neighbors.push({ particle: neighbor, distance });
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Calculate forces (reuse vectors to reduce garbage collection)
+            const toPlanet = this._tempVec1 || (this._tempVec1 = new THREE.Vector3());
+            const toMoon = this._tempVec2 || (this._tempVec2 = new THREE.Vector3());
+            
             toPlanet.copy(this.planet.position).sub(particle.position);
             toMoon.copy(this.moon.position).sub(particle.position);
             
-            const distanceFromPlanetCenter = toPlanet.length();
-            const distanceFromMoon = toMoon.length();
-
+            const distanceToPlanet = toPlanet.length();
+            const distanceToMoon = toMoon.length();
+            
             // Calculate gravitational forces
-            const planetForce = this.calculateGravitationalForce(particle.position, this.parameters.planetMass, this.planet.position, 1.0);
-            const moonForce = this.calculateGravitationalForce(particle.position, this.parameters.moonMass, this.moon.position, 5.0);
+            const totalForce = this.calculateGravitationalForce(particle.position, this.parameters.planetMass, this.planet.position, 1.0);
+            totalForce.add(this.calculateGravitationalForce(particle.position, this.parameters.moonMass, this.moon.position, 5.0));
             
-            const planetForceMagnitude = planetForce.length();
-            const moonForceMagnitude = moonForce.length();
-
-            // Calculate influence factors
-            const maxDistance = this.parameters.moonOrbitRadius * 2;
-            const planetInfluence = Math.min(1.0, (1.0 - distanceFromPlanetCenter / maxDistance) * (planetForceMagnitude * 0.1));
-            const moonInfluence = Math.min(1.0, (1.0 - distanceFromMoon / maxDistance) * (moonForceMagnitude * 0.1));
-            
-            // Normalize influences
-            const totalInfluence = planetInfluence + moonInfluence;
-            const normalizedPlanetInfluence = totalInfluence > 0 ? planetInfluence / totalInfluence : 0;
-            const normalizedMoonInfluence = totalInfluence > 0 ? moonInfluence / totalInfluence : 0;
-
-            // Calculate final color
-            const finalColor = new THREE.Color();
-            finalColor.copy(this.particleBaseColor); // Start with water color
-
-            if (totalInfluence > 0) {
-                // Mix with planet color
-                finalColor.lerp(this.planetColor, planetInfluence * normalizedPlanetInfluence);
-                // Mix with moon color
-                finalColor.lerp(this.moonColor, moonInfluence * normalizedMoonInfluence);
+            // Add surface tension and cohesion only if we have neighbors
+            if (neighbors.length > 0) {
+                const centerOfMass = this._tempVec3 || (this._tempVec3 = new THREE.Vector3());
+                centerOfMass.set(0, 0, 0);
+                
+                for (const {particle: neighbor, distance} of neighbors) {
+                    centerOfMass.add(neighbor.position);
+                    
+                    // Simplified tension forces
+                    const direction = this._tempVec4 || (this._tempVec4 = new THREE.Vector3());
+                    direction.copy(neighbor.position).sub(particle.position).normalize();
+                    direction.multiplyScalar((1 - distance / this.parameters.surfaceTensionRadius) * 
+                                          this.parameters.surfaceTensionStrength);
+                    totalForce.add(direction);
+                }
+                
+                // Add cohesion force
+                centerOfMass.divideScalar(neighbors.length)
+                           .sub(particle.position)
+                           .multiplyScalar(this.parameters.cohesionStrength);
+                totalForce.add(centerOfMass);
             }
-
-            // Update color in buffer
-            colors.setXYZ(i, finalColor.r, finalColor.g, finalColor.b);
-
-            // Add forces together for physics update
-            tempForce.copy(planetForce).add(moonForce);
-
-            // Apply surface tension and other forces
-            // ... (keep existing surface tension and cohesion code here)
-
+            
             // Update physics
-            particle.velocity.add(tempForce.multiplyScalar(scaledDeltaTime));
+            particle.velocity.add(totalForce.multiplyScalar(scaledDeltaTime));
             particle.velocity.multiplyScalar(0.995); // Damping
-            particle.position.add(particle.velocity.clone().multiplyScalar(scaledDeltaTime));
+            particle.position.add(particle.velocity.multiplyScalar(scaledDeltaTime));
             
             // Simple collision response
-            if (distanceFromMoon < this.parameters.moonRadius || 
-                distanceFromPlanetCenter < this.parameters.planetRadius + this.parameters.fluidHeight) {
+            if (distanceToMoon < this.parameters.moonRadius || 
+                distanceToPlanet < this.parameters.planetRadius + this.parameters.fluidHeight) {
                 particle.velocity.multiplyScalar(-0.5);
             }
-
+            
             // Update particle position in geometry
             positions[i * 3] = particle.position.x;
             positions[i * 3 + 1] = particle.position.y;
@@ -274,7 +312,6 @@ export class FluidSimulator {
         }
 
         this.particleSystem.geometry.attributes.position.needsUpdate = true;
-        this.particleSystem.geometry.attributes.color.needsUpdate = true;
         this.frameCount = (this.frameCount || 0) + 1;
     }
 
