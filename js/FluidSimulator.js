@@ -193,24 +193,17 @@ export class FluidSimulator {
                 particle.velocity.multiplyScalar(0.95);
             }
             // Handle planet surface interaction
-            else if (distanceToPlanet < this.parameters.planetRadius + this.parameters.fluidHeight) {
+            if (distanceToPlanet < this.parameters.planetRadius + this.parameters.fluidHeight) {
                 const normal = toPlanet.normalize();
                 
-                // Keep particles at surface level
+                // Simply keep particles at exact surface level
                 const targetRadius = this.parameters.planetRadius + this.parameters.fluidHeight;
                 particle.position.copy(this.planet.position.clone().add(normal.multiplyScalar(targetRadius)));
                 
-                // Project velocity along surface
-                const normalVelocity = normal.multiplyScalar(particle.velocity.dot(normal));
-                const tangentialVelocity = particle.velocity.clone().sub(normalVelocity);
-                
-                // Maintain only tangential velocity component with high damping
-                particle.velocity.copy(tangentialVelocity.multiplyScalar(0.98));
-                
-                // Add a small circular motion component to simulate ocean currents
+                // Add very gentle circular motion for ocean current
                 const rotationAxis = new THREE.Vector3(0, 1, 0);
                 const tangentDir = new THREE.Vector3().crossVectors(normal, rotationAxis).normalize();
-                particle.velocity.add(tangentDir.multiplyScalar(0.02));
+                particle.velocity.copy(tangentDir.multiplyScalar(0.01));
             }
             
             // Calculate surface tension and distribution forces
@@ -335,6 +328,8 @@ export class FluidSimulator {
         return tangent;
     }
 }
+
+
 
 
 
