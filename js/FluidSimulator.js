@@ -37,8 +37,7 @@ export class FluidSimulator {
             surfaceTensionStrength: 0.8,    // Strength of surface tension between particles
             surfaceTensionRadius: 1.0,      // Radius within which particles affect each other
             cohesionStrength: 0.5,          // Strength of particle cohesion
-            tensionResistance: 0.3,        // Resistance to stretching/separation
-            surfaceFriction: 0.8           // How much the planet's rotation affects particles (0-1)
+            tensionResistance: 0.3          // Resistance to stretching/separation
         };
 
         // Clone default parameters for current use
@@ -189,7 +188,6 @@ export class FluidSimulator {
 
     update() {
         const deltaTime = this.parameters.timeScale * 0.016;
-        const scaledDeltaTime = deltaTime * 0.08;
 
         // Update rotations
         this.parameters.planetRotationAngle += this.parameters.planetRotationSpeed * deltaTime;
@@ -199,12 +197,66 @@ export class FluidSimulator {
         this.planet.rotation.y = this.parameters.planetRotationAngle;
         this.moon.rotation.y = this.parameters.moonRotationAngle;
 
-        // Calculate planet's tangential velocity at surface
-        const planetAngularVelocity = this.parameters.planetRotationSpeed;
+        // Update moon orbital position
+        if (this.frameCount % 3 === 0) {
+            const currentAngle = Math.atan2(this.moon.position.z, this.moon.position.x);
+            const newAngle = currentAngle + this.parameters.moonOrbitalSpeed * deltaTime * 3;
+            this.updateMoonPosition(newAngle);
+        }
 
+        // Optimize neighborhood calculation using spatial partitioning
+        const positions = this.particleSystem.geometry.attributes.position.array;
+        const gridSize = this.parameters.surfaceTensionRadius;
+        const spatialGrid = new Map();
+        
+        // First pass: Build spatial grid
+        for (let i = 0; i < this.particles.length; i++) {
+            const particle = this.particles[i];
+            const gridX = Math.floor(particle.position.x / gridSize);
+            const gridY = Math.floor(particle.position.y / gridSize);
+            const gridZ = Math.floor(particle.position.z / gridSize);
+            const gridKey = `${gridX},${gridY},${gridZ}`;
+            
+            if (!spatialGrid.has(gridKey)) {
+                spatialGrid.set(gridKey, []);
+            }
+            spatialGrid.get(gridKey).push(i);
+        }
+
+        // Second pass: Update particles
+        const scaledDeltaTime = deltaTime * 0.08;
+        
         for (let i = 0; i < this.particles.length; i++) {
             const particle = this.particles[i];
             
+            // Get nearby grid cells
+            const gridX = Math.floor(particle.position.x / gridSize);
+            const gridY = Math.floor(particle.position.y / gridSize);
+            const gridZ = Math.floor(particle.position.z / gridSize);
+            
+            const neighbors = [];
+            
+            // Check only neighboring cells
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dz = -1; dz <= 1; dz++) {
+                        const key = `${gridX + dx},${gridY + dy},${gridZ + dz}`;
+                        const cellParticles = spatialGrid.get(key) || [];
+                        
+                        for (const j of cellParticles) {
+                            if (i === j) continue;
+                            
+                            const neighbor = this.particles[j];
+                            const distance = particle.position.distanceTo(neighbor.position);
+                            
+                            if (distance < this.parameters.surfaceTensionRadius) {
+                                neighbors.push({ particle: neighbor, distance });
+                            }
+                        }
+                    }
+                }
+            }
+
             // Calculate forces (reuse vectors to reduce garbage collection)
             const toPlanet = this._tempVec1 || (this._tempVec1 = new THREE.Vector3());
             const toMoon = this._tempVec2 || (this._tempVec2 = new THREE.Vector3());
@@ -212,64 +264,47 @@ export class FluidSimulator {
             toPlanet.copy(this.planet.position).sub(particle.position);
             toMoon.copy(this.moon.position).sub(particle.position);
             
-            const distanceFromPlanetCenter = toPlanet.length();
-            const distanceFromMoon = toMoon.length();
+            const distanceToPlanet = toPlanet.length();
+            const distanceToMoon = toMoon.length();
             
             // Calculate gravitational forces
             const totalForce = this.calculateGravitationalForce(particle.position, this.parameters.planetMass, this.planet.position, 1.0);
             totalForce.add(this.calculateGravitationalForce(particle.position, this.parameters.moonMass, this.moon.position, 5.0));
-
-            // Calculate distance to planet surface
-            const distanceToPlanetSurface = distanceFromPlanetCenter - this.parameters.planetRadius;
-            const surfaceProximity = Math.max(0, 1 - (distanceToPlanetSurface / this.parameters.fluidHeight));
             
-            if (surfaceProximity > 0) {
-                // Calculate the expected tangential velocity at this point due to planet rotation
-                const particleDirection = particle.position.clone().normalize();
-                const rotationAxis = new THREE.Vector3(0, 1, 0);
-                const tangentialDirection = new THREE.Vector3();
-                tangentialDirection.crossVectors(rotationAxis, particleDirection);
+            // Add surface tension and cohesion only if we have neighbors
+            if (neighbors.length > 0) {
+                const centerOfMass = this._tempVec3 || (this._tempVec3 = new THREE.Vector3());
+                centerOfMass.set(0, 0, 0);
                 
-                // Scale by planet radius and rotation speed
-                const tangentialSpeed = planetAngularVelocity * particle.position.length();
-                const surfaceVelocity = tangentialDirection.multiplyScalar(tangentialSpeed);
+                for (const {particle: neighbor, distance} of neighbors) {
+                    centerOfMass.add(neighbor.position);
+                    
+                    // Simplified tension forces
+                    const direction = this._tempVec4 || (this._tempVec4 = new THREE.Vector3());
+                    direction.copy(neighbor.position).sub(particle.position).normalize();
+                    direction.multiplyScalar((1 - distance / this.parameters.surfaceTensionRadius) * 
+                                          this.parameters.surfaceTensionStrength);
+                    totalForce.add(direction);
+                }
                 
-                // Apply friction force based on difference between particle and surface velocity
-                const velocityDifference = surfaceVelocity.clone().sub(particle.velocity);
-                const frictionForce = velocityDifference.multiplyScalar(
-                    this.parameters.surfaceFriction * 
-                    surfaceProximity * 
-                    scaledDeltaTime
-                );
-                
-                particle.velocity.add(frictionForce);
+                // Add cohesion force
+                centerOfMass.divideScalar(neighbors.length)
+                           .sub(particle.position)
+                           .multiplyScalar(this.parameters.cohesionStrength);
+                totalForce.add(centerOfMass);
             }
-
+            
             // Update physics
             particle.velocity.add(totalForce.multiplyScalar(scaledDeltaTime));
             particle.velocity.multiplyScalar(0.995); // Damping
             particle.position.add(particle.velocity.multiplyScalar(scaledDeltaTime));
             
-            // Modified collision response to maintain some tangential velocity
-            if (distanceToPlanetSurface < this.parameters.planetRadius + this.parameters.fluidHeight) {
-                // Split velocity into normal and tangential components
-                const normal = particle.position.clone().normalize();
-                const normalComponent = normal.multiplyScalar(particle.velocity.dot(normal));
-                const tangentialComponent = particle.velocity.clone().sub(normalComponent);
-                
-                // Reverse normal component but maintain some tangential component
-                normalComponent.multiplyScalar(-0.5);
-                tangentialComponent.multiplyScalar(0.8);
-                
-                particle.velocity.copy(normalComponent).add(tangentialComponent);
-                
-                // Ensure minimum distance from planet surface
-                const minDistance = this.parameters.planetRadius + 0.01;
-                if (particle.position.length() < minDistance) {
-                    particle.position.normalize().multiplyScalar(minDistance);
-                }
+            // Simple collision response
+            if (distanceToMoon < this.parameters.moonRadius || 
+                distanceToPlanet < this.parameters.planetRadius + this.parameters.fluidHeight) {
+                particle.velocity.multiplyScalar(-0.5);
             }
-
+            
             // Update particle position in geometry
             positions[i * 3] = particle.position.x;
             positions[i * 3 + 1] = particle.position.y;
@@ -277,7 +312,7 @@ export class FluidSimulator {
         }
 
         this.particleSystem.geometry.attributes.position.needsUpdate = true;
-        this.frameCount++;
+        this.frameCount = (this.frameCount || 0) + 1;
     }
 
     calculateGravitationalForce(particlePos, bodyMass, bodyPos, multiplier = 1.0) {
