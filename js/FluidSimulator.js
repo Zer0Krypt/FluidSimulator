@@ -126,7 +126,7 @@ export class FluidSimulator {
 
         const material = new THREE.PointsMaterial({
             size: this.parameters.particleSize,
-            vertexColors: true,
+            vertexColors: true,  // Make sure this is true
             transparent: true,
             opacity: 0.8,
             sizeAttenuation: true
@@ -145,13 +145,19 @@ export class FluidSimulator {
 
         // Update particles
         const positions = this.particleSystem.geometry.attributes.position.array;
+        const colors = this.particleSystem.geometry.attributes.color.array;
 
-        // Calculate moon's velocity for particle distribution
-        const moonVelocity = new THREE.Vector3(
-            -Math.sin(currentAngle) * this.parameters.moonOrbitalSpeed,
-            0,
-            Math.cos(currentAngle) * this.parameters.moonOrbitalSpeed
-        ).multiplyScalar(this.parameters.moonOrbitRadius);
+        // Define colors in RGB format (0-1 range)
+        const planetColor = {
+            r: 0x44 / 0xff,
+            g: 0xaa / 0xff,
+            b: 0x44 / 0xff
+        };
+        const moonColor = {
+            r: 0x80 / 0xff,
+            g: 0x00 / 0xff,
+            b: 0x80 / 0xff
+        };
 
         for (let i = 0; i < this.particles.length; i++) {
             const particle = this.particles[i];
@@ -161,11 +167,22 @@ export class FluidSimulator {
             const toMoon = this.moon.position.clone().sub(particle.position);
             const distanceToPlanet = toPlanet.length();
             const distanceToMoon = toMoon.length();
-            
+
             // Calculate gravitational forces
             const planetForce = this.calculateGravitationalForce(particle.position, this.parameters.planetMass, this.planet.position, 1.0);
             const moonForce = this.calculateGravitationalForce(particle.position, this.parameters.moonMass, this.moon.position, 5.0);
-            
+
+            // Calculate relative influence (0 = planet dominated, 1 = moon dominated)
+            const planetInfluence = planetForce.length();
+            const moonInfluence = moonForce.length();
+            const totalInfluence = planetInfluence + moonInfluence;
+            const moonInfluenceRatio = moonInfluence / totalInfluence;
+
+            // Interpolate colors
+            colors[i * 3] = planetColor.r * (1 - moonInfluenceRatio) + moonColor.r * moonInfluenceRatio;     // R
+            colors[i * 3 + 1] = planetColor.g * (1 - moonInfluenceRatio) + moonColor.g * moonInfluenceRatio; // G
+            colors[i * 3 + 2] = planetColor.b * (1 - moonInfluenceRatio) + moonColor.b * moonInfluenceRatio; // B
+
             // Handle moon collisions first (priority over planet)
             if (distanceToMoon < this.parameters.moonRadius) {
                 const normal = toMoon.normalize();
@@ -234,6 +251,7 @@ export class FluidSimulator {
         }
 
         this.particleSystem.geometry.attributes.position.needsUpdate = true;
+        this.particleSystem.geometry.attributes.color.needsUpdate = true;  // Make sure color updates are applied
     }
 
     calculateGravitationalForce(particlePos, bodyMass, bodyPos, multiplier = 1.0) {
