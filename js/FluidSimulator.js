@@ -4,51 +4,111 @@ export class FluidSimulator {
     constructor() {
         this.particles = [];
         this.parameters = {
-            gravity: -9.81,
-            particleCount: 1000,  // Default value
+            // Planet parameters
+            planetRadius: 5.0,
+            planetMass: 1000.0,
+            
+            // Moon parameters
+            moonRadius: 1.0,
+            moonMass: 100.0,
+            moonOrbitRadius: 15.0,
+            moonInitialAngle: 0,
+            moonOrbitalSpeed: 0.5,
+            
+            // Fluid parameters
+            particleCount: 1000,
             particleSize: 0.1,
+            fluidHeight: 0.5,    // Height of fluid above planet surface
+            fluidSpread: 0.8,    // How much of planet surface is covered (0-1)
+            
+            // Physics parameters
+            gravity: -9.81,
             viscosity: 1.0,
-            density: 1000.0, // kg/m³
-            pressure: 1.0,
-            surfaceTension: 0.072, // N/m
+            density: 1000.0,
+            gravitationalConstant: 6.67430e-11,
             timeScale: 1.0,
-            smoothingLength: 0.1,
-            boundaryDamping: 0.5,
-            gasConstant: 2000,
-            restDensity: 1000.0,
-            scale: 1.0, // 1.0 = meters
+            scale: 1.0
         };
 
+        this.planet = this.createPlanet();
+        this.moon = this.createMoon();
+        this.orbitLine = this.createOrbitLine();
         this.initializeParticles();
     }
 
-    initParticleSystem() {
+    createPlanet() {
+        const geometry = new THREE.SphereGeometry(this.parameters.planetRadius, 32, 32);
+        const material = new THREE.MeshPhongMaterial({ color: 0x4444aa });
+        return new THREE.Mesh(geometry, material);
+    }
+
+    createMoon() {
+        const geometry = new THREE.SphereGeometry(this.parameters.moonRadius, 32, 32);
+        const material = new THREE.MeshPhongMaterial({ color: 0x888888 });
+        const moon = new THREE.Mesh(geometry, material);
+        
+        // Set initial position
+        this.updateMoonPosition(this.parameters.moonInitialAngle);
+        return moon;
+    }
+
+    createOrbitLine() {
+        const segments = 64;
+        const geometry = new THREE.BufferGeometry();
+        const material = new THREE.LineBasicMaterial({ color: 0x888888, opacity: 0.5, transparent: true });
+        
+        // Create orbit preview points
+        const points = [];
+        for (let i = 0; i <= segments; i++) {
+            const angle = (i / segments) * Math.PI * 2;
+            const x = Math.cos(angle) * this.parameters.moonOrbitRadius;
+            const z = Math.sin(angle) * this.parameters.moonOrbitRadius;
+            points.push(new THREE.Vector3(x, 0, z));
+        }
+        
+        geometry.setFromPoints(points);
+        return new THREE.Line(geometry, material);
+    }
+
+    updateMoonPosition(angle) {
+        const x = Math.cos(angle) * this.parameters.moonOrbitRadius;
+        const z = Math.sin(angle) * this.parameters.moonOrbitRadius;
+        this.moon.position.set(x, 0, z);
+    }
+
+    initializeParticles() {
+        this.particles = [];
         const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(this.parameters.particleCount * 3);
         const colors = new Float32Array(this.parameters.particleCount * 3);
 
-        // Initialize particles with positions and velocities
+        // Distribute particles on planet surface
         for (let i = 0; i < this.parameters.particleCount; i++) {
+            // Generate random spherical coordinates
+            const theta = Math.random() * 2 * Math.PI;
+            const phi = Math.acos(2 * Math.random() - 1);
+            
+            // Calculate position slightly above planet surface
+            const radius = this.parameters.planetRadius + this.parameters.fluidHeight;
+            const x = radius * Math.sin(phi) * Math.cos(theta);
+            const y = radius * Math.sin(phi) * Math.sin(theta);
+            const z = radius * Math.cos(phi);
+
             const particle = {
-                position: new THREE.Vector3(
-                    Math.random() * 2 - 1,
-                    Math.random() * 2 - 1,
-                    Math.random() * 2 - 1
-                ),
+                position: new THREE.Vector3(x, y, z),
                 velocity: new THREE.Vector3(0, 0, 0),
                 density: 0,
                 pressure: 0
             };
             this.particles.push(particle);
 
-            // Set initial positions in geometry
-            positions[i * 3] = particle.position.x;
-            positions[i * 3 + 1] = particle.position.y;
-            positions[i * 3 + 2] = particle.position.z;
+            // Set positions and colors
+            positions[i * 3] = x;
+            positions[i * 3 + 1] = y;
+            positions[i * 3 + 2] = z;
 
-            // Set particle colors
-            colors[i * 3] = 0.5;
-            colors[i * 3 + 1] = 0.7;
+            colors[i * 3] = 0.0;
+            colors[i * 3 + 1] = 0.5;
             colors[i * 3 + 2] = 1.0;
         }
 
@@ -66,75 +126,28 @@ export class FluidSimulator {
         this.particleSystem = new THREE.Points(geometry, material);
     }
 
-    calculateDensity(particle, neighbors) {
-        let density = 0;
-        const h = this.parameters.smoothingLength;
-
-        for (const neighbor of neighbors) {
-            const dist = particle.position.distanceTo(neighbor.position);
-            if (dist < h) {
-                // Simple polynomial kernel
-                density += Math.pow(h * h - dist * dist, 3);
-            }
-        }
-
-        return density;
-    }
-
-    findNeighbors(particle) {
-        return this.particles.filter(other => {
-            if (other === particle) return false;
-            return particle.position.distanceTo(other.position) < this.parameters.smoothingLength;
-        });
-    }
-
     update() {
         const deltaTime = this.parameters.timeScale * 0.016;
+
+        // Update moon position
+        const currentAngle = Math.atan2(this.moon.position.z, this.moon.position.x);
+        const newAngle = currentAngle + this.parameters.moonOrbitalSpeed * deltaTime;
+        this.updateMoonPosition(newAngle);
+
+        // Update particles
         const positions = this.particleSystem.geometry.attributes.position.array;
 
-        // Update particle physics
         for (let i = 0; i < this.particles.length; i++) {
             const particle = this.particles[i];
-            const neighbors = this.findNeighbors(particle);
-
-            // Calculate density
-            particle.density = this.calculateDensity(particle, neighbors);
-            particle.pressure = this.parameters.gasConstant * (particle.density - this.parameters.restDensity);
-
-            // Apply forces
-            const force = new THREE.Vector3(0, this.parameters.gravity, 0);
-
-            // Apply pressure and viscosity forces
-            for (const neighbor of neighbors) {
-                const diff = neighbor.position.clone().sub(particle.position);
-                const dist = diff.length();
-                if (dist > 0) {
-                    // Pressure force
-                    const pressureForce = diff.normalize().multiplyScalar(
-                        (particle.pressure + neighbor.pressure) / (2 * neighbor.density)
-                    );
-                    force.add(pressureForce);
-
-                    // Viscosity force
-                    const viscosityForce = neighbor.velocity.clone()
-                        .sub(particle.velocity)
-                        .multiplyScalar(this.parameters.viscosity / neighbor.density);
-                    force.add(viscosityForce);
-                }
-            }
-
+            
+            // Calculate gravitational forces
+            const planetForce = this.calculateGravitationalForce(particle.position, this.parameters.planetMass, this.planet.position);
+            const moonForce = this.calculateGravitationalForce(particle.position, this.parameters.moonMass, this.moon.position);
+            
             // Update velocity and position
-            particle.velocity.add(force.multiplyScalar(deltaTime));
+            particle.velocity.add(planetForce.multiplyScalar(deltaTime));
+            particle.velocity.add(moonForce.multiplyScalar(deltaTime));
             particle.position.add(particle.velocity.clone().multiplyScalar(deltaTime));
-
-            // Boundary conditions
-            const bounds = 10 * this.parameters.scale;
-            ['x', 'y', 'z'].forEach(axis => {
-                if (Math.abs(particle.position[axis]) > bounds) {
-                    particle.position[axis] = Math.sign(particle.position[axis]) * bounds;
-                    particle.velocity[axis] *= -this.parameters.boundaryDamping;
-                }
-            });
 
             // Update geometry
             positions[i * 3] = particle.position.x;
@@ -145,94 +158,38 @@ export class FluidSimulator {
         this.particleSystem.geometry.attributes.position.needsUpdate = true;
     }
 
+    calculateGravitationalForce(particlePos, bodyMass, bodyPos) {
+        const direction = bodyPos.clone().sub(particlePos);
+        const distance = direction.length();
+        const forceMagnitude = this.parameters.gravitationalConstant * bodyMass / (distance * distance);
+        return direction.normalize().multiplyScalar(forceMagnitude);
+    }
+
     setParameter(name, value) {
         if (name in this.parameters) {
             this.parameters[name] = value;
-            this.updateScale();
-        }
-    }
-
-    updateScale() {
-        if (this.particleSystem) {
-            this.particleSystem.material.size = this.parameters.particleSize * this.parameters.scale;
-        }
-    }
-
-    getParticleSystem() {
-        return this.particleSystem;
-    }
-
-    initializeParticles(count = null) {
-        if (count !== null) {
-            this.parameters.particleCount = count;
-        }
-        
-        // Clear existing particles
-        this.particles = [];
-        
-        // Create new geometry
-        const geometry = new THREE.BufferGeometry();
-        const positions = new Float32Array(this.parameters.particleCount * 3);
-        const colors = new Float32Array(this.parameters.particleCount * 3);
-
-        // Initialize particles in a more visible arrangement (cube formation)
-        const size = Math.ceil(Math.pow(this.parameters.particleCount, 1/3));
-        const spacing = 0.2;
-        let index = 0;
-
-        for (let x = 0; x < size && index < this.parameters.particleCount; x++) {
-            for (let y = 0; y < size && index < this.parameters.particleCount; y++) {
-                for (let z = 0; z < size && index < this.parameters.particleCount; z++) {
-                    const particle = {
-                        position: new THREE.Vector3(
-                            (x - size/2) * spacing,
-                            (y - size/2) * spacing + 5, // Lift particles up
-                            (z - size/2) * spacing
-                        ),
-                        velocity: new THREE.Vector3(0, 0, 0),
-                        density: 0,
-                        pressure: 0
-                    };
-                    this.particles.push(particle);
-
-                    // Set initial positions in geometry
-                    positions[index * 3] = particle.position.x;
-                    positions[index * 3 + 1] = particle.position.y;
-                    positions[index * 3 + 2] = particle.position.z;
-
-                    // Set particle colors (blue with slight variation)
-                    colors[index * 3] = 0.3 + Math.random() * 0.2;     // R
-                    colors[index * 3 + 1] = 0.5 + Math.random() * 0.2; // G
-                    colors[index * 3 + 2] = 0.8 + Math.random() * 0.2; // B
-
-                    index++;
-                }
+            
+            // Update relevant components based on parameter changes
+            if (['moonOrbitRadius', 'moonRadius'].includes(name)) {
+                this.moon.geometry = new THREE.SphereGeometry(this.parameters.moonRadius, 32, 32);
+                this.updateMoonPosition(Math.atan2(this.moon.position.z, this.moon.position.x));
+                this.orbitLine.geometry.dispose();
+                this.orbitLine.geometry = this.createOrbitLine().geometry;
+            }
+            if (['planetRadius'].includes(name)) {
+                this.planet.geometry = new THREE.SphereGeometry(this.parameters.planetRadius, 32, 32);
+                this.initializeParticles();
             }
         }
+    }
 
-        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-        // Update or create new particle system
-        if (this.particleSystem) {
-            this.particleSystem.geometry.dispose();
-            this.particleSystem.geometry = geometry;
-        } else {
-            const material = new THREE.PointsMaterial({
-                size: this.parameters.particleSize,
-                vertexColors: true,
-                transparent: true,
-                opacity: 0.8,
-                sizeAttenuation: true
-            });
-            this.particleSystem = new THREE.Points(geometry, material);
-        }
-
-        this.updateScale();
+    getObjects() {
+        return {
+            planet: this.planet,
+            moon: this.moon,
+            orbitLine: this.orbitLine,
+            particles: this.particleSystem
+        };
     }
 }
-
-
-
-
 

@@ -35,22 +35,25 @@ export class UIController {
         const physicsControls = document.getElementById('physics-controls');
         
         const controlGroups = {
-            basic: [
-                { name: 'scale', min: 0.001, max: 1000000, step: 0.001, default: 1.0, type: 'exponential' },
-                { name: 'timeScale', min: 0.01, max: 10, step: 0.01, default: 1.0 },
-                { name: 'particleCount', min: 100, max: 10000, step: 100, default: 1000 }
+            planet: [
+                { name: 'planetRadius', min: 1, max: 10, step: 0.1, default: 5.0, label: 'Planet Radius' },
+                { name: 'planetMass', min: 100, max: 10000, step: 100, default: 1000.0, label: 'Planet Mass' }
             ],
-            physics: [
-                { name: 'gravity', min: -100, max: 100, step: 0.1, default: -9.81 },
-                { name: 'viscosity', min: 0, max: 10, step: 0.01, default: 1.0 },
-                { name: 'density', min: 0.1, max: 10000, step: 0.1, default: 1000.0 },
-                { name: 'pressure', min: 0, max: 10, step: 0.1, default: 1.0 },
-                { name: 'surfaceTension', min: 0, max: 1, step: 0.001, default: 0.072 }
+            moon: [
+                { name: 'moonRadius', min: 0.1, max: 5, step: 0.1, default: 1.0, label: 'Moon Radius' },
+                { name: 'moonMass', min: 10, max: 1000, step: 10, default: 100.0, label: 'Moon Mass' },
+                { name: 'moonOrbitRadius', min: 8, max: 30, step: 0.5, default: 15.0, label: 'Orbit Radius' },
+                { name: 'moonOrbitalSpeed', min: 0.1, max: 2.0, step: 0.1, default: 0.5, label: 'Orbital Speed' }
             ],
-            advanced: [
-                { name: 'smoothingLength', min: 0.01, max: 1, step: 0.01, default: 0.1 },
-                { name: 'boundaryDamping', min: 0, max: 1, step: 0.01, default: 0.5 },
-                { name: 'gasConstant', min: 100, max: 10000, step: 100, default: 2000 }
+            fluid: [
+                { name: 'particleCount', min: 100, max: 10000, step: 100, default: 1000, label: 'Particle Count' },
+                { name: 'fluidHeight', min: 0.1, max: 2.0, step: 0.1, default: 0.5, label: 'Fluid Height' },
+                { name: 'fluidSpread', min: 0.1, max: 1.0, step: 0.1, default: 0.8, label: 'Fluid Coverage' },
+                { name: 'viscosity', min: 0.1, max: 10.0, step: 0.1, default: 1.0, label: 'Fluid Viscosity' }
+            ],
+            simulation: [
+                { name: 'timeScale', min: 0.1, max: 10.0, step: 0.1, default: 1.0, label: 'Time Scale' },
+                { name: 'gravitationalConstant', min: 1e-12, max: 1e-10, step: 1e-12, default: 6.67430e-11, label: 'G Constant' }
             ]
         };
 
@@ -175,6 +178,7 @@ export class UIController {
         }
     }
 }
+
 
 
 

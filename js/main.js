@@ -28,6 +28,14 @@ class SimulationApp {
         this.setupCamera();
         this.setupControls();
         this.setupLights();
+        
+        // Add all objects to the scene
+        const objects = this.fluidSimulator.getObjects();
+        this.scene.add(objects.planet);
+        this.scene.add(objects.moon);
+        this.scene.add(objects.orbitLine);
+        this.scene.add(objects.particles);
+        
         this.animate();
         
         window.addEventListener('resize', () => this.onWindowResize());
@@ -39,7 +47,7 @@ class SimulationApp {
     }
 
     setupCamera() {
-        this.camera.position.set(0, 5, 10);
+        this.camera.position.set(20, 15, 20);
         this.camera.lookAt(0, 0, 0);
     }
 
@@ -57,7 +65,12 @@ class SimulationApp {
         const ambientLight = new THREE.AmbientLight(0x404040);
         const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
         directionalLight.position.set(10, 10, 10);
-        this.scene.add(ambientLight, directionalLight);
+        
+        // Add a second light to better illuminate the dark side
+        const secondaryLight = new THREE.DirectionalLight(0x404040, 0.5);
+        secondaryLight.position.set(-10, -10, -10);
+        
+        this.scene.add(ambientLight, directionalLight, secondaryLight);
     }
 
     animate() {
@@ -95,5 +108,6 @@ class SimulationApp {
 }
 
 const app = new SimulationApp();
+
 
 
