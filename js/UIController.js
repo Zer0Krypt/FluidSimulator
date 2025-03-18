@@ -38,7 +38,7 @@ export class UIController {
             basic: [
                 { name: 'scale', min: 0.001, max: 1000000, step: 0.001, default: 1.0, type: 'exponential' },
                 { name: 'timeScale', min: 0.01, max: 10, step: 0.01, default: 1.0 },
-                { name: 'particleCount', min: 100, max: 1000000, step: 100, default: 1000 }
+                { name: 'particleCount', min: 100, max: 10000, step: 100, default: 1000 }
             ],
             physics: [
                 { name: 'gravity', min: -100, max: 100, step: 0.1, default: -9.81 },
@@ -68,29 +68,39 @@ export class UIController {
                 const label = document.createElement('label');
                 label.textContent = control.name;
                 
-                const slider = document.createElement('input');
-                slider.type = 'range';
-                slider.min = control.min;
-                slider.max = control.max;
-                slider.step = control.step;
-                slider.value = control.default;
-                slider.className = 'slider-control';
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.min = control.min;
+                input.max = control.max;
+                input.step = control.step;
+                input.value = control.default;
+                input.className = 'number-input';
+                input.setAttribute('data-param', control.name);
                 
-                const valueDisplay = document.createElement('span');
-                valueDisplay.textContent = control.default;
-                
-                slider.addEventListener('input', (e) => {
+                // Add min/max display
+                const rangeInfo = document.createElement('span');
+                rangeInfo.className = 'range-info';
+                rangeInfo.textContent = `(${control.min} - ${control.max})`;
+
+                input.addEventListener('change', (e) => {
                     let value = parseFloat(e.target.value);
+                    
+                    // Clamp value to min/max
+                    value = Math.max(control.min, Math.min(control.max, value));
+                    
                     if (control.type === 'exponential') {
                         value = Math.pow(10, value);
                     }
+                    
+                    // Update input value if it was clamped
+                    input.value = value;
+                    
                     this.app.fluidSimulator.setParameter(control.name, value);
-                    valueDisplay.textContent = value.toFixed(4);
                 });
 
                 container.appendChild(label);
-                container.appendChild(slider);
-                container.appendChild(valueDisplay);
+                container.appendChild(input);
+                container.appendChild(rangeInfo);
                 groupDiv.appendChild(container);
             });
 
@@ -159,12 +169,13 @@ export class UIController {
     }
 
     updateControlValue(name, value) {
-        const slider = document.querySelector(`input[type="range"][data-param="${name}"]`);
-        if (slider) {
-            slider.value = value;
-            slider.nextElementSibling.textContent = value.toFixed(4);
+        const input = document.querySelector(`input[data-param="${name}"]`);
+        if (input) {
+            input.value = value;
         }
     }
 }
+
+
 
 

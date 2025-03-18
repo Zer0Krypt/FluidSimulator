@@ -5,7 +5,7 @@ export class FluidSimulator {
         this.particles = [];
         this.parameters = {
             gravity: -9.81,
-            particleCount: 1000,
+            particleCount: 1000,  // Default value
             particleSize: 0.1,
             viscosity: 1.0,
             density: 1000.0, // kg/m³
@@ -231,6 +231,7 @@ export class FluidSimulator {
         this.updateScale();
     }
 }
+
 
 
 
