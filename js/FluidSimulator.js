@@ -19,7 +19,7 @@ export class FluidSimulator {
             scale: 1.0, // 1.0 = meters
         };
 
-        this.initParticleSystem();
+        this.initializeParticles();
     }
 
     initParticleSystem() {
@@ -159,5 +159,64 @@ export class FluidSimulator {
     getParticleSystem() {
         return this.particleSystem;
     }
+
+    initializeParticles(count = null) {
+        if (count !== null) {
+            this.parameters.particleCount = count;
+        }
+        
+        // Clear existing particles
+        this.particles = [];
+        
+        // Create new geometry
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(this.parameters.particleCount * 3);
+        const colors = new Float32Array(this.parameters.particleCount * 3);
+
+        // Initialize particles with positions and velocities
+        for (let i = 0; i < this.parameters.particleCount; i++) {
+            const particle = {
+                position: new THREE.Vector3(
+                    Math.random() * 2 - 1,
+                    Math.random() * 2 - 1,
+                    Math.random() * 2 - 1
+                ),
+                velocity: new THREE.Vector3(0, 0, 0),
+                density: 0,
+                pressure: 0
+            };
+            this.particles.push(particle);
+
+            // Set initial positions in geometry
+            positions[i * 3] = particle.position.x;
+            positions[i * 3 + 1] = particle.position.y;
+            positions[i * 3 + 2] = particle.position.z;
+
+            // Set particle colors
+            colors[i * 3] = 0.5;
+            colors[i * 3 + 1] = 0.7;
+            colors[i * 3 + 2] = 1.0;
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+        // Update or create new particle system
+        if (this.particleSystem) {
+            this.particleSystem.geometry.dispose();
+            this.particleSystem.geometry = geometry;
+        } else {
+            const material = new THREE.PointsMaterial({
+                size: this.parameters.particleSize,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.8,
+                sizeAttenuation: true
+            });
+            this.particleSystem = new THREE.Points(geometry, material);
+        }
+    }
 }
+
+
 
