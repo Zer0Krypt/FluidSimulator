@@ -47,9 +47,9 @@ export class UIController {
                 },
                 { 
                     name: 'planetMass', 
-                    min: 100, 
-                    max: 10000, 
-                    step: 100, 
+                    min: 1, 
+                    max: 100000, 
+                    step: 0.1, 
                     default: 1000.0, 
                     label: 'Planet Mass',
                     tooltip: 'Mass of the planet. Higher values create stronger gravitational pull, lower values allow particles to float more freely.'
@@ -67,9 +67,9 @@ export class UIController {
                 },
                 { 
                     name: 'moonMass', 
-                    min: 10, 
-                    max: 1000, 
-                    step: 10, 
+                    min: 1, 
+                    max: 100000, 
+                    step: 0.1, 
                     default: 100.0, 
                     label: 'Moon Mass',
                     tooltip: 'Mass of the moon. Higher values create stronger tidal forces, lower values reduce the moon\'s influence on fluid particles.'
@@ -285,6 +285,7 @@ export class UIController {
         }
     }
 }
+
 
 
 
