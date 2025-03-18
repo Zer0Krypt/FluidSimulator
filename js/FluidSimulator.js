@@ -7,6 +7,8 @@ export class FluidSimulator {
             // Planet parameters
             planetRadius: 5.0,
             planetMass: 1000.0,
+            planetRotationSpeed: 0.0,
+            planetRotationAngle: 0,
             
             // Moon parameters
             moonRadius: 1.0,
@@ -14,6 +16,8 @@ export class FluidSimulator {
             moonOrbitRadius: 15.0,
             moonInitialAngle: 0,
             moonOrbitalSpeed: 0.5,
+            moonRotationSpeed: 0.0,
+            moonRotationAngle: 0,
             
             // Fluid parameters
             particleCount: 1000,
@@ -34,14 +38,6 @@ export class FluidSimulator {
             surfaceTensionRadius: 1.0,      // Radius within which particles affect each other
             cohesionStrength: 0.5,          // Strength of particle cohesion
             tensionResistance: 0.3          // Resistance to stretching/separation
-
-            // Add rotation parameters
-            planetRotationSpeed: 0.0,
-            moonRotationSpeed: 0.0,
-            
-            // Track current rotation angles
-            planetRotationAngle: 0,
-            moonRotationAngle: 0
         };
 
         // Clone default parameters for current use
