@@ -173,24 +173,19 @@ export class FluidSimulator {
                 // Move particle to moon surface
                 particle.position.copy(this.moon.position.clone().sub(normal.multiplyScalar(this.parameters.moonRadius)));
                 
-                // Add tangential component of moon's orbital velocity
-                const normalVel = normal.clone().multiplyScalar(moonVelocity.dot(normal));
-                const tangentialVel = moonVelocity.clone().sub(normalVel);
-                
-                // Add random tangential velocity for distribution
+                // Add random tangential velocity for distribution around moon surface
                 const randomTangent = this.getRandomTangentialVector(normal);
-                const distributionSpeed = 0.1;
+                const distributionSpeed = 0.05;  // Reduced speed for gentler spreading
                 
-                // Combine velocities
-                particle.velocity.copy(tangentialVel)
-                    .add(randomTangent.multiplyScalar(distributionSpeed));
+                // Set velocity for spreading along moon surface
+                particle.velocity.copy(randomTangent.multiplyScalar(distributionSpeed));
                 
                 // Add slight outward force to prevent clumping
-                const surfaceRepulsion = normal.multiplyScalar(0.05);
+                const surfaceRepulsion = normal.multiplyScalar(0.02);
                 particle.velocity.add(surfaceRepulsion);
                 
-                // Apply friction to prevent excessive speeds
-                particle.velocity.multiplyScalar(0.95);
+                // Apply strong damping to keep movement gentle
+                particle.velocity.multiplyScalar(0.9);
             }
             // Handle planet surface interaction
             if (distanceToPlanet < this.parameters.planetRadius + this.parameters.fluidHeight) {
@@ -328,6 +323,7 @@ export class FluidSimulator {
         return tangent;
     }
 }
+
 
 
 
