@@ -86,12 +86,11 @@ export class FluidSimulator {
         const positions = new Float32Array(this.parameters.particleCount * 3);
         const colors = new Float32Array(this.parameters.particleCount * 3);
 
-        // Distribute particles on planet surface
+        // Distribute particles evenly on planet surface
         for (let i = 0; i < this.parameters.particleCount; i++) {
-            // Generate random spherical coordinates within a limited range
-            const theta = Math.random() * 2 * Math.PI;
-            // Limit phi to create a band of particles around the planet's equator
-            const phi = (Math.random() * 0.5 + 0.75) * Math.PI;
+            // Generate random spherical coordinates
+            const theta = Math.random() * 2 * Math.PI;  // Longitude (0 to 2π)
+            const phi = Math.acos(2 * Math.random() - 1);  // Latitude (0 to π)
             
             // Calculate position slightly above planet surface
             const radius = this.parameters.planetRadius + this.parameters.fluidHeight;
@@ -224,6 +223,7 @@ export class FluidSimulator {
         return this.particleSystem;
     }
 }
+
 
 
 
