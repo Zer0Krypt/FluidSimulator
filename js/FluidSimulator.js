@@ -2,6 +2,11 @@ import * as THREE from 'three';
 
 export class FluidSimulator {
     constructor() {
+        // Add color definitions
+        this.particleBaseColor = new THREE.Color(0x0080FF);  // Blue water
+        this.planetColor = new THREE.Color(0x44aa44);        // Green planet
+        this.moonColor = new THREE.Color(0x800080);          // Purple moon
+
         // Store default parameters
         this.defaultParameters = {
             // Planet parameters
@@ -180,14 +185,29 @@ export class FluidSimulator {
             vertexColors: true,  // Make sure this is true
             transparent: true,
             opacity: 0.8,
-            sizeAttenuation: true
+            sizeAttenuation: true,
+            blending: THREE.AdditiveBlending  // Optional: adds a nice glow effect
         });
 
+        // Initialize all particles with base water color
+        const colors = new Float32Array(this.parameters.particleCount * 3);
+        for (let i = 0; i < this.parameters.particleCount; i++) {
+            colors[i * 3] = this.particleBaseColor.r;     // R
+            colors[i * 3 + 1] = this.particleBaseColor.g; // G
+            colors[i * 3 + 2] = this.particleBaseColor.b; // B
+        }
+
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        
         this.particleSystem = new THREE.Points(geometry, material);
     }
 
     update() {
         const deltaTime = this.parameters.timeScale * 0.016;
+        const scaledDeltaTime = deltaTime * 0.08;
+
+        // Get color attribute for updating
+        const colors = this.particleSystem.geometry.attributes.color;
 
         // Update rotations
         this.parameters.planetRotationAngle += this.parameters.planetRotationSpeed * deltaTime;
@@ -224,8 +244,6 @@ export class FluidSimulator {
         }
 
         // Second pass: Update particles
-        const scaledDeltaTime = deltaTime * 0.08;
-        
         for (let i = 0; i < this.particles.length; i++) {
             const particle = this.particles[i];
             
@@ -305,6 +323,50 @@ export class FluidSimulator {
                 particle.velocity.multiplyScalar(-0.5);
             }
             
+            // Calculate vectors to planet and moon
+            const toPlanet = this._tempVec1 || (this._tempVec1 = new THREE.Vector3());
+            const toMoon = this._tempVec2 || (this._tempVec2 = new THREE.Vector3());
+            
+            toPlanet.copy(this.planet.position).sub(particle.position);
+            toMoon.copy(this.moon.position).sub(particle.position);
+            
+            const distanceFromPlanetCenter = toPlanet.length();
+            const distanceFromMoon = toMoon.length();
+
+            // Calculate gravitational forces
+            const planetForce = this.calculateGravitationalForce(particle.position, this.parameters.planetMass, this.planet.position, 1.0);
+            const moonForce = this.calculateGravitationalForce(particle.position, this.parameters.moonMass, this.moon.position, 5.0);
+            
+            const planetForceMagnitude = planetForce.length();
+            const moonForceMagnitude = moonForce.length();
+
+            // Calculate influence factors
+            const maxDistance = this.parameters.moonOrbitRadius * 2;
+            const planetInfluence = Math.min(1.0, (1.0 - distanceFromPlanetCenter / maxDistance) * (planetForceMagnitude * 0.1));
+            const moonInfluence = Math.min(1.0, (1.0 - distanceFromMoon / maxDistance) * (moonForceMagnitude * 0.1));
+            
+            // Normalize influences
+            const totalInfluence = planetInfluence + moonInfluence;
+            const normalizedPlanetInfluence = totalInfluence > 0 ? planetInfluence / totalInfluence : 0;
+            const normalizedMoonInfluence = totalInfluence > 0 ? moonInfluence / totalInfluence : 0;
+
+            // Calculate final color
+            const finalColor = new THREE.Color();
+            finalColor.copy(this.particleBaseColor); // Start with water color
+
+            if (totalInfluence > 0) {
+                // Mix with planet color
+                finalColor.lerp(this.planetColor, planetInfluence * normalizedPlanetInfluence);
+                // Mix with moon color
+                finalColor.lerp(this.moonColor, moonInfluence * normalizedMoonInfluence);
+            }
+
+            // Update color in buffer
+            colors.setXYZ(i, finalColor.r, finalColor.g, finalColor.b);
+
+            // Add forces together for physics update
+            const totalForce = planetForce.add(moonForce);
+
             // Update particle position in geometry
             positions[i * 3] = particle.position.x;
             positions[i * 3 + 1] = particle.position.y;
@@ -312,6 +374,7 @@ export class FluidSimulator {
         }
 
         this.particleSystem.geometry.attributes.position.needsUpdate = true;
+        this.particleSystem.geometry.attributes.color.needsUpdate = true;
         this.frameCount = (this.frameCount || 0) + 1;
     }
 
