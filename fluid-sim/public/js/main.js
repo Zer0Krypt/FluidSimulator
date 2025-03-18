@@ -1,5 +1,5 @@
-import * as THREE from './lib/three.module.js';
-import { OrbitControls } from './lib/OrbitControls.js';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 
 class Particle {
     constructor(position, mass = 1.0) {
@@ -292,6 +292,7 @@ class FluidSimulation {
 }
 
 const simulation = new FluidSimulation();
+
 
 
 
