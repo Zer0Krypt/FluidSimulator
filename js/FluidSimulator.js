@@ -141,30 +141,35 @@ export class FluidSimulator {
     }
 
     update() {
-        // Convert deltaTime to real seconds
-        const deltaTime = this.parameters.timeScale * 0.016;  // 16ms in seconds
+        const deltaTime = this.parameters.timeScale * 0.016;
 
-        // Update moon position using real orbital mechanics
+        // Update moon position
         const currentAngle = Math.atan2(this.moon.position.z, this.moon.position.x);
         const newAngle = currentAngle + this.parameters.moonOrbitalSpeed * deltaTime;
         this.updateMoonPosition(newAngle);
 
+        // Update particles
         const positions = this.particleSystem.geometry.attributes.position.array;
+
+        // Calculate moon's velocity for particle distribution
+        const moonVelocity = new THREE.Vector3(
+            -Math.sin(currentAngle) * this.parameters.moonOrbitalSpeed,
+            0,
+            Math.cos(currentAngle) * this.parameters.moonOrbitalSpeed
+        ).multiplyScalar(this.parameters.moonOrbitRadius);
 
         for (let i = 0; i < this.particles.length; i++) {
             const particle = this.particles[i];
             
-            // Calculate distances (scaled)
+            // Calculate distances to both bodies
             const toPlanet = this.planet.position.clone().sub(particle.position);
             const toMoon = this.moon.position.clone().sub(particle.position);
-            const distanceToPlanet = toPlanet.length() / this.parameters.scale;
-            const distanceToMoon = toMoon.length() / this.parameters.scale;
+            const distanceToPlanet = toPlanet.length();
+            const distanceToMoon = toMoon.length();
             
-            // Calculate gravitational forces including tidal effects
-            const planetForce = this.calculateGravitationalForce(particle.position, 
-                this.parameters.planetMass, this.planet.position, 1.0);
-            const moonForce = this.calculateGravitationalForce(particle.position, 
-                this.parameters.moonMass, this.moon.position, 1.0);
+            // Calculate gravitational forces
+            const planetForce = this.calculateGravitationalForce(particle.position, this.parameters.planetMass, this.planet.position, 1.0);
+            const moonForce = this.calculateGravitationalForce(particle.position, this.parameters.moonMass, this.moon.position, 5.0);
             
             // Handle moon collisions first (priority over planet)
             if (distanceToMoon < this.parameters.moonRadius) {
@@ -173,32 +178,44 @@ export class FluidSimulator {
                 // Move particle to moon surface
                 particle.position.copy(this.moon.position.clone().sub(normal.multiplyScalar(this.parameters.moonRadius)));
                 
-                // Add random tangential velocity for distribution around moon surface
-                const randomTangent = this.getRandomTangentialVector(normal);
-                const distributionSpeed = 0.05;  // Reduced speed for gentler spreading
+                // Add tangential component of moon's orbital velocity
+                const normalVel = normal.clone().multiplyScalar(moonVelocity.dot(normal));
+                const tangentialVel = moonVelocity.clone().sub(normalVel);
                 
-                // Set velocity for spreading along moon surface
-                particle.velocity.copy(randomTangent.multiplyScalar(distributionSpeed));
+                // Add random tangential velocity for distribution
+                const randomTangent = this.getRandomTangentialVector(normal);
+                const distributionSpeed = 0.1;
+                
+                // Combine velocities
+                particle.velocity.copy(tangentialVel)
+                    .add(randomTangent.multiplyScalar(distributionSpeed));
                 
                 // Add slight outward force to prevent clumping
-                const surfaceRepulsion = normal.multiplyScalar(0.02);
+                const surfaceRepulsion = normal.multiplyScalar(0.05);
                 particle.velocity.add(surfaceRepulsion);
                 
-                // Apply strong damping to keep movement gentle
-                particle.velocity.multiplyScalar(0.9);
+                // Apply friction to prevent excessive speeds
+                particle.velocity.multiplyScalar(0.95);
             }
             // Handle planet surface interaction
-            if (distanceToPlanet < this.parameters.planetRadius + this.parameters.fluidHeight) {
+            else if (distanceToPlanet < this.parameters.planetRadius + this.parameters.fluidHeight) {
                 const normal = toPlanet.normalize();
                 
-                // Simply keep particles at exact surface level
+                // Keep particles at surface level
                 const targetRadius = this.parameters.planetRadius + this.parameters.fluidHeight;
                 particle.position.copy(this.planet.position.clone().add(normal.multiplyScalar(targetRadius)));
                 
-                // Add very gentle circular motion for ocean current
+                // Project velocity along surface
+                const normalVelocity = normal.multiplyScalar(particle.velocity.dot(normal));
+                const tangentialVelocity = particle.velocity.clone().sub(normalVelocity);
+                
+                // Maintain only tangential velocity component with high damping
+                particle.velocity.copy(tangentialVelocity.multiplyScalar(0.98));
+                
+                // Add a small circular motion component to simulate ocean currents
                 const rotationAxis = new THREE.Vector3(0, 1, 0);
                 const tangentDir = new THREE.Vector3().crossVectors(normal, rotationAxis).normalize();
-                particle.velocity.copy(tangentDir.multiplyScalar(0.01));
+                particle.velocity.add(tangentDir.multiplyScalar(0.02));
             }
             
             // Calculate surface tension and distribution forces
@@ -219,28 +236,13 @@ export class FluidSimulator {
             // Combine forces
             const totalForce = planetForce.clone()
                 .add(moonForce)
-                .add(coriolisForce);
-
-            // Update velocity and position using real physics
-            particle.velocity.add(totalForce.multiplyScalar(deltaTime));
+                .add(surfaceForce);
             
-            // Apply viscous damping
-            const dampingFactor = Math.exp(-this.parameters.viscosity * deltaTime / 
-                this.parameters.density);
-            particle.velocity.multiplyScalar(dampingFactor);
-            
-            // Update position
-            particle.position.add(particle.velocity.clone().multiplyScalar(deltaTime));
-
-            // Keep particles at surface level with minimal intervention
-            if (distanceToPlanet < (this.parameters.planetRadius + this.parameters.fluidHeight) / 
-                this.parameters.scale) {
-                const normal = toPlanet.normalize();
-                const targetRadius = (this.parameters.planetRadius + this.parameters.fluidHeight) / 
-                    this.parameters.scale;
-                particle.position.copy(this.planet.position.clone().add(
-                    normal.multiplyScalar(targetRadius * this.parameters.scale)));
-            }
+            // Update velocity and position with gentler physics
+            const scaledDeltaTime = deltaTime * 0.08; // Reduced time scale for smoother motion
+            particle.velocity.add(totalForce.multiplyScalar(scaledDeltaTime));
+            particle.velocity.multiplyScalar(0.995); // Gentle damping
+            particle.position.add(particle.velocity.clone().multiplyScalar(scaledDeltaTime));
 
             // Update geometry
             positions[i * 3] = particle.position.x;
