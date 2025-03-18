@@ -4,35 +4,30 @@ export class FluidSimulator {
     constructor() {
         this.particles = [];
         this.parameters = {
-            // Real physical values (for calculations)
-            realPlanetRadius: 6.371e6,     // Earth radius in meters
-            realPlanetMass: 5.972e24,      // Earth mass in kg
-            realMoonRadius: 1.737e6,       // Moon radius in meters
-            realMoonMass: 7.34767309e22,   // Moon mass in kg
-            realMoonOrbitRadius: 3.844e8,  // Average Earth-Moon distance in meters
+            // Planet parameters
+            planetRadius: 5.0,
+            planetMass: 1000.0,
             
-            // Visualization scale (for rendering)
-            visualScale: 1e-5,             // Scale factor for visualization
-            
-            // Scaled values (for rendering)
-            planetRadius: 10,              // Scaled radius for visualization
-            moonRadius: 2.7,              // Scaled radius for visualization
-            moonOrbitRadius: 50,          // Scaled orbit for visualization
+            // Moon parameters
+            moonRadius: 1.0,
+            moonMass: 100.0,
+            moonOrbitRadius: 15.0,
             moonInitialAngle: 0,
-            moonOrbitalSpeed: 2.662e-6,    // Radians per second (27.32 days period)
+            moonOrbitalSpeed: 0.5,
             
             // Fluid parameters
             particleCount: 1000,
             particleSize: 0.1,
-            fluidHeight: 0.2,              // Scaled ocean depth for visualization
-            fluidSpread: 0.8,              // 80% of Earth covered by water
+            fluidHeight: 0.5,    // Height of fluid above planet surface
+            fluidSpread: 0.8,    // How much of planet surface is covered (0-1)
             
-            // Physics parameters (real values)
-            gravity: -9.81,                // m/s²
-            viscosity: 1.002e-3,           // Water viscosity at 20°C (Pa·s)
-            density: 1000,                 // Water density kg/m³
-            gravitationalConstant: 6.67430e-11,  // m³ kg⁻¹ s⁻²
-            timeScale: 1.0
+            // Physics parameters
+            gravity: -9.81,
+            viscosity: 1.0,
+            density: 1000.0,
+            gravitationalConstant: 6.67430e-11,
+            timeScale: 1.0,
+            scale: 1.0
         };
 
         this.planet = this.createPlanet();
@@ -43,7 +38,7 @@ export class FluidSimulator {
 
     createPlanet() {
         const geometry = new THREE.SphereGeometry(this.parameters.planetRadius, 32, 32);
-        const material = new THREE.MeshPhongMaterial({ color: 0x44aa44 });
+        const material = new THREE.MeshPhongMaterial({ color: 0x44aa44 });  // Changed to green
         return new THREE.Mesh(geometry, material);
     }
 
@@ -52,7 +47,7 @@ export class FluidSimulator {
         const material = new THREE.MeshPhongMaterial({ color: 0x888888 });
         const moon = new THREE.Mesh(geometry, material);
         
-        // Set initial position using visualization scale
+        // Calculate initial position directly instead of using updateMoonPosition
         const angle = this.parameters.moonInitialAngle;
         const x = Math.cos(angle) * this.parameters.moonOrbitRadius;
         const z = Math.sin(angle) * this.parameters.moonOrbitRadius;
@@ -91,37 +86,22 @@ export class FluidSimulator {
         const positions = new Float32Array(this.parameters.particleCount * 3);
         const colors = new Float32Array(this.parameters.particleCount * 3);
 
-        // Ensure parameters are valid
-        if (!Number.isFinite(this.parameters.planetRadius) || 
-            !Number.isFinite(this.parameters.fluidHeight)) {
-            console.error('Invalid parameters:', this.parameters);
-            return;
-        }
+        // Calculate the area of planet surface to cover based on fluidSpread
+        const maxPhi = Math.PI * this.parameters.fluidSpread;
+        const phiStart = (Math.PI - maxPhi) / 2; // Center the fluid coverage
 
-        const radius = this.parameters.planetRadius + this.parameters.fluidHeight;
-        
         for (let i = 0; i < this.parameters.particleCount; i++) {
-            // Use simpler distribution method initially
-            const u = Math.random() * 2 - 1; // Range: -1 to 1
-            const theta = Math.random() * Math.PI * 2; // Range: 0 to 2π
+            // Generate evenly distributed spherical coordinates
+            const theta = Math.random() * 2 * Math.PI;  // Longitude (0 to 2π)
+            const phi = phiStart + (Math.random() * maxPhi);  // Latitude (controlled by fluidSpread)
             
-            // Calculate position
-            const x = radius * Math.sqrt(1 - u * u) * Math.cos(theta);
-            const y = radius * Math.sqrt(1 - u * u) * Math.sin(theta);
-            const z = radius * u;
+            // Calculate position exactly at planet surface + fluidHeight
+            const radius = this.parameters.planetRadius + this.parameters.fluidHeight;
+            const x = radius * Math.sin(phi) * Math.cos(theta);
+            const y = radius * Math.sin(phi) * Math.sin(theta);
+            const z = radius * Math.cos(phi);
 
-            // Validate coordinates
-            if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
-                console.error('Invalid coordinates generated:', { x, y, z, u, theta, radius });
-                continue;
-            }
-
-            // Set positions
-            positions[i * 3] = x;
-            positions[i * 3 + 1] = y;
-            positions[i * 3 + 2] = z;
-
-            // Create particle
+            // Create particle with zero initial velocity
             const particle = {
                 position: new THREE.Vector3(x, y, z),
                 velocity: new THREE.Vector3(0, 0, 0),
@@ -130,18 +110,15 @@ export class FluidSimulator {
             };
             this.particles.push(particle);
 
-            // Set colors
+            // Set positions and colors
+            positions[i * 3] = x;
+            positions[i * 3 + 1] = y;
+            positions[i * 3 + 2] = z;
+
+            // Blue color for water particles
             colors[i * 3] = 0.0;     // R
             colors[i * 3 + 1] = 0.5; // G
             colors[i * 3 + 2] = 1.0; // B
-        }
-
-        // Validate final arrays
-        for (let i = 0; i < positions.length; i++) {
-            if (!Number.isFinite(positions[i])) {
-                console.error('Invalid position value at index', i, positions[i]);
-                positions[i] = 0;
-            }
         }
 
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -156,11 +133,6 @@ export class FluidSimulator {
         });
 
         this.particleSystem = new THREE.Points(geometry, material);
-        
-        // Final validation
-        if (!this.particleSystem.geometry.attributes.position) {
-            console.error('Position attribute missing after creation');
-        }
     }
 
     update() {
@@ -201,44 +173,32 @@ export class FluidSimulator {
                 // Move particle to moon surface
                 particle.position.copy(this.moon.position.clone().sub(normal.multiplyScalar(this.parameters.moonRadius)));
                 
-                // Add tangential component of moon's orbital velocity
-                const normalVel = normal.clone().multiplyScalar(moonVelocity.dot(normal));
-                const tangentialVel = moonVelocity.clone().sub(normalVel);
-                
-                // Add random tangential velocity for distribution
+                // Add random tangential velocity for distribution around moon surface
                 const randomTangent = this.getRandomTangentialVector(normal);
-                const distributionSpeed = 0.1;
+                const distributionSpeed = 0.05;  // Reduced speed for gentler spreading
                 
-                // Combine velocities
-                particle.velocity.copy(tangentialVel)
-                    .add(randomTangent.multiplyScalar(distributionSpeed));
+                // Set velocity for spreading along moon surface
+                particle.velocity.copy(randomTangent.multiplyScalar(distributionSpeed));
                 
                 // Add slight outward force to prevent clumping
-                const surfaceRepulsion = normal.multiplyScalar(0.05);
+                const surfaceRepulsion = normal.multiplyScalar(0.02);
                 particle.velocity.add(surfaceRepulsion);
                 
-                // Apply friction to prevent excessive speeds
-                particle.velocity.multiplyScalar(0.95);
+                // Apply strong damping to keep movement gentle
+                particle.velocity.multiplyScalar(0.9);
             }
             // Handle planet surface interaction
-            else if (distanceToPlanet < this.parameters.planetRadius + this.parameters.fluidHeight) {
+            if (distanceToPlanet < this.parameters.planetRadius + this.parameters.fluidHeight) {
                 const normal = toPlanet.normalize();
                 
-                // Keep particles at surface level
+                // Simply keep particles at exact surface level
                 const targetRadius = this.parameters.planetRadius + this.parameters.fluidHeight;
                 particle.position.copy(this.planet.position.clone().add(normal.multiplyScalar(targetRadius)));
                 
-                // Project velocity along surface
-                const normalVelocity = normal.multiplyScalar(particle.velocity.dot(normal));
-                const tangentialVelocity = particle.velocity.clone().sub(normalVelocity);
-                
-                // Maintain only tangential velocity component with high damping
-                particle.velocity.copy(tangentialVelocity.multiplyScalar(0.98));
-                
-                // Add a small circular motion component to simulate ocean currents
+                // Add very gentle circular motion for ocean current
                 const rotationAxis = new THREE.Vector3(0, 1, 0);
                 const tangentDir = new THREE.Vector3().crossVectors(normal, rotationAxis).normalize();
-                particle.velocity.add(tangentDir.multiplyScalar(0.02));
+                particle.velocity.copy(tangentDir.multiplyScalar(0.01));
             }
             
             // Calculate surface tension and distribution forces
@@ -276,22 +236,19 @@ export class FluidSimulator {
         this.particleSystem.geometry.attributes.position.needsUpdate = true;
     }
 
-    calculateGravitationalForce(particlePos, bodyMass, bodyPos) {
+    calculateGravitationalForce(particlePos, bodyMass, bodyPos, multiplier = 1.0) {
         const direction = bodyPos.clone().sub(particlePos);
-        // Convert visualization distance to real distance
-        const realDistance = direction.length() / this.parameters.visualScale;
+        const distance = direction.length();
         
-        // Calculate force using real values
-        const forceMagnitude = (this.parameters.gravitationalConstant * bodyMass) / 
-            (realDistance * realDistance);
+        // Adjusted minimum distance
+        const minDistance = 0.5;
+        const safeDist = Math.max(distance, minDistance);
         
-        // Add tidal force component
-        const tidalForceMagnitude = (2 * this.parameters.gravitationalConstant * bodyMass * 
-            this.parameters.fluidHeight) / (realDistance * realDistance * realDistance);
+        // Adjusted gravitational force scaling
+        const scaledG = this.parameters.gravitationalConstant * 1e10;
+        const forceMagnitude = (scaledG * bodyMass * multiplier) / (safeDist * safeDist);
         
-        // Scale force back for visualization
-        return direction.normalize().multiplyScalar((forceMagnitude + tidalForceMagnitude) * 
-            this.parameters.visualScale);
+        return direction.normalize().multiplyScalar(forceMagnitude);
     }
 
     setParameter(name, value) {
@@ -366,4 +323,3 @@ export class FluidSimulator {
         return tangent;
     }
 }
-
