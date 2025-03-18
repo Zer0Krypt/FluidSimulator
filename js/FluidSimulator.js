@@ -38,7 +38,7 @@ export class FluidSimulator {
 
     createPlanet() {
         const geometry = new THREE.SphereGeometry(this.parameters.planetRadius, 32, 32);
-        const material = new THREE.MeshPhongMaterial({ color: 0x4444aa });
+        const material = new THREE.MeshPhongMaterial({ color: 0x44aa44 });  // Changed to green
         return new THREE.Mesh(geometry, material);
     }
 
@@ -88,9 +88,10 @@ export class FluidSimulator {
 
         // Distribute particles on planet surface
         for (let i = 0; i < this.parameters.particleCount; i++) {
-            // Generate random spherical coordinates
+            // Generate random spherical coordinates within a limited range
             const theta = Math.random() * 2 * Math.PI;
-            const phi = Math.acos(2 * Math.random() - 1);
+            // Limit phi to create a band of particles around the planet's equator
+            const phi = (Math.random() * 0.5 + 0.75) * Math.PI;
             
             // Calculate position slightly above planet surface
             const radius = this.parameters.planetRadius + this.parameters.fluidHeight;
@@ -148,12 +149,25 @@ export class FluidSimulator {
             const planetForce = this.calculateGravitationalForce(particle.position, this.parameters.planetMass, this.planet.position);
             const moonForce = this.calculateGravitationalForce(particle.position, this.parameters.moonMass, this.moon.position);
             
-            // Combine forces before applying deltaTime
-            const totalForce = planetForce.add(moonForce);
+            // Add surface tension force to keep particles near planet surface
+            const toCenter = this.planet.position.clone().sub(particle.position);
+            const distanceToCenter = toCenter.length();
+            const targetRadius = this.parameters.planetRadius + this.parameters.fluidHeight;
+            const surfaceForceMagnitude = (distanceToCenter - targetRadius) * 10.0;
+            const surfaceForce = toCenter.normalize().multiplyScalar(surfaceForceMagnitude);
             
-            // Update velocity and position
-            particle.velocity.add(totalForce.multiplyScalar(deltaTime));
-            particle.position.add(particle.velocity.clone().multiplyScalar(deltaTime));
+            // Combine all forces
+            const totalForce = planetForce.clone()
+                .add(moonForce)
+                .add(surfaceForce);
+            
+            // Add damping to prevent excessive velocities
+            particle.velocity.multiplyScalar(0.99);
+            
+            // Update velocity and position with smaller time step for stability
+            const scaledDeltaTime = deltaTime * 0.1;
+            particle.velocity.add(totalForce.multiplyScalar(scaledDeltaTime));
+            particle.position.add(particle.velocity.clone().multiplyScalar(scaledDeltaTime));
 
             // Update geometry
             positions[i * 3] = particle.position.x;
@@ -169,11 +183,11 @@ export class FluidSimulator {
         const distance = direction.length();
         
         // Add a small offset to prevent division by zero and extreme forces at very close distances
-        const minDistance = 0.1;
+        const minDistance = 1.0;
         const safeDist = Math.max(distance, minDistance);
         
-        // Scale up the gravitational constant to make effects more visible
-        const scaledG = this.parameters.gravitationalConstant * 1e11;
+        // Use a smaller scale factor for more stable simulation
+        const scaledG = this.parameters.gravitationalConstant * 1e9;
         const forceMagnitude = scaledG * bodyMass / (safeDist * safeDist);
         
         return direction.normalize().multiplyScalar(forceMagnitude);
@@ -210,6 +224,8 @@ export class FluidSimulator {
         return this.particleSystem;
     }
 }
+
+
 
 
 
