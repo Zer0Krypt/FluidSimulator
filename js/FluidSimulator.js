@@ -144,32 +144,63 @@ export class FluidSimulator {
         for (let i = 0; i < this.particles.length; i++) {
             const particle = this.particles[i];
             
+            // Calculate distances to both bodies
+            const toPlanet = this.planet.position.clone().sub(particle.position);
+            const toMoon = this.moon.position.clone().sub(particle.position);
+            const distanceToPlanet = toPlanet.length();
+            const distanceToMoon = toMoon.length();
+            
             // Calculate gravitational forces with increased moon influence
             const planetForce = this.calculateGravitationalForce(particle.position, this.parameters.planetMass, this.planet.position, 1.0);
             const moonForce = this.calculateGravitationalForce(particle.position, this.parameters.moonMass, this.moon.position, 5.0);
             
-            // Calculate distance to planet center
-            const toCenter = this.planet.position.clone().sub(particle.position);
-            const distanceToCenter = toCenter.length();
-            
-            // Check for collision with planet surface
-            if (distanceToCenter < this.parameters.planetRadius) {
-                // Move particle back to surface
-                const normal = toCenter.normalize();
+            // Handle collisions with planet
+            if (distanceToPlanet < this.parameters.planetRadius) {
+                // Move particle back to planet surface
+                const normal = toPlanet.normalize();
                 particle.position.copy(this.planet.position.clone().sub(normal.multiplyScalar(this.parameters.planetRadius)));
                 
-                // Project velocity onto surface plane (maintain tangential velocity)
+                // Project velocity onto surface plane
                 const normalVelocity = normal.multiplyScalar(particle.velocity.dot(normal));
                 const tangentialVelocity = particle.velocity.clone().sub(normalVelocity);
-                
-                // Keep tangential velocity but reduce it for friction
                 particle.velocity.copy(tangentialVelocity.multiplyScalar(0.8));
             }
             
-            // Add gentler surface tension force
-            const targetRadius = this.parameters.planetRadius + this.parameters.fluidHeight;
-            const surfaceForceMagnitude = (distanceToCenter - targetRadius) * 0.8;
-            const surfaceForce = toCenter.normalize().multiplyScalar(surfaceForceMagnitude);
+            // Handle collisions with moon
+            if (distanceToMoon < this.parameters.moonRadius) {
+                // Move particle back to moon surface
+                const normal = toMoon.normalize();
+                particle.position.copy(this.moon.position.clone().sub(normal.multiplyScalar(this.parameters.moonRadius)));
+                
+                // Project velocity onto moon surface plane
+                const normalVelocity = normal.multiplyScalar(particle.velocity.dot(normal));
+                const tangentialVelocity = particle.velocity.clone().sub(normalVelocity);
+                particle.velocity.copy(tangentialVelocity.multiplyScalar(0.8));
+                
+                // Add moon's orbital velocity to the particle
+                const moonVelocity = new THREE.Vector3(
+                    -Math.sin(currentAngle) * this.parameters.moonOrbitalSpeed,
+                    0,
+                    Math.cos(currentAngle) * this.parameters.moonOrbitalSpeed
+                ).multiplyScalar(this.parameters.moonOrbitRadius);
+                particle.velocity.add(moonVelocity);
+            }
+            
+            // Calculate surface tension forces for both bodies
+            let surfaceForce = new THREE.Vector3(0, 0, 0);
+            
+            // Planet surface tension (only if closer to planet than moon)
+            if (distanceToPlanet < distanceToMoon) {
+                const targetRadius = this.parameters.planetRadius + this.parameters.fluidHeight;
+                const surfaceForceMagnitude = (distanceToPlanet - targetRadius) * 0.8;
+                surfaceForce.add(toPlanet.normalize().multiplyScalar(surfaceForceMagnitude));
+            }
+            // Moon surface tension (only if closer to moon than planet)
+            else {
+                const targetRadius = this.parameters.moonRadius + (this.parameters.fluidHeight * 0.2); // Smaller fluid height for moon
+                const surfaceForceMagnitude = (distanceToMoon - targetRadius) * 0.8;
+                surfaceForce.add(toMoon.normalize().multiplyScalar(surfaceForceMagnitude));
+            }
             
             // Combine all forces
             const totalForce = planetForce.clone()
@@ -182,17 +213,25 @@ export class FluidSimulator {
             // Update velocity and position with smaller time step
             const scaledDeltaTime = deltaTime * 0.1;
             
-            // If particle is near surface, only apply forces parallel to surface
-            if (Math.abs(distanceToCenter - this.parameters.planetRadius) < 0.1) {
-                const normal = toCenter.normalize();
+            // Apply forces based on which body the particle is closer to
+            if (distanceToPlanet < this.parameters.planetRadius + 0.1) {
+                // Near planet surface
+                const normal = toPlanet.normalize();
                 const forceDotNormal = totalForce.dot(normal);
                 const normalForce = normal.multiplyScalar(forceDotNormal);
                 const tangentialForce = totalForce.clone().sub(normalForce);
-                
-                // Allow slight normal force to prevent sticking
+                particle.velocity.add(tangentialForce.multiplyScalar(scaledDeltaTime));
+                particle.velocity.add(normalForce.multiplyScalar(scaledDeltaTime * 0.1));
+            } else if (distanceToMoon < this.parameters.moonRadius + 0.1) {
+                // Near moon surface
+                const normal = toMoon.normalize();
+                const forceDotNormal = totalForce.dot(normal);
+                const normalForce = normal.multiplyScalar(forceDotNormal);
+                const tangentialForce = totalForce.clone().sub(normalForce);
                 particle.velocity.add(tangentialForce.multiplyScalar(scaledDeltaTime));
                 particle.velocity.add(normalForce.multiplyScalar(scaledDeltaTime * 0.1));
             } else {
+                // In space
                 particle.velocity.add(totalForce.multiplyScalar(scaledDeltaTime));
             }
             
@@ -277,6 +316,7 @@ export class FluidSimulator {
         return this.particleSystem;
     }
 }
+
 
 
 
