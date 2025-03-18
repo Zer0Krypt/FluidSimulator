@@ -148,9 +148,11 @@ export class FluidSimulator {
             const planetForce = this.calculateGravitationalForce(particle.position, this.parameters.planetMass, this.planet.position);
             const moonForce = this.calculateGravitationalForce(particle.position, this.parameters.moonMass, this.moon.position);
             
+            // Combine forces before applying deltaTime
+            const totalForce = planetForce.add(moonForce);
+            
             // Update velocity and position
-            particle.velocity.add(planetForce.multiplyScalar(deltaTime));
-            particle.velocity.add(moonForce.multiplyScalar(deltaTime));
+            particle.velocity.add(totalForce.multiplyScalar(deltaTime));
             particle.position.add(particle.velocity.clone().multiplyScalar(deltaTime));
 
             // Update geometry
@@ -165,7 +167,15 @@ export class FluidSimulator {
     calculateGravitationalForce(particlePos, bodyMass, bodyPos) {
         const direction = bodyPos.clone().sub(particlePos);
         const distance = direction.length();
-        const forceMagnitude = this.parameters.gravitationalConstant * bodyMass / (distance * distance);
+        
+        // Add a small offset to prevent division by zero and extreme forces at very close distances
+        const minDistance = 0.1;
+        const safeDist = Math.max(distance, minDistance);
+        
+        // Scale up the gravitational constant to make effects more visible
+        const scaledG = this.parameters.gravitationalConstant * 1e11;
+        const forceMagnitude = scaledG * bodyMass / (safeDist * safeDist);
+        
         return direction.normalize().multiplyScalar(forceMagnitude);
     }
 
@@ -200,6 +210,7 @@ export class FluidSimulator {
         return this.particleSystem;
     }
 }
+
 
 
 
