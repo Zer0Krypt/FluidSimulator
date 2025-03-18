@@ -98,7 +98,7 @@ export class FluidSimulator {
         for (let i = 0; i < this.parameters.particleCount; i++) {
             // Generate evenly distributed spherical coordinates
             const theta = Math.random() * 2 * Math.PI;  // Longitude (0 to 2π)
-            const phi = phiStart + (Math.random() * maxPhi);  // Latitude (controlled by fluidSpread)
+            const phi = Math.acos(1 - 2 * Math.random()); // Better distribution on sphere
             
             // Calculate position exactly at planet surface + fluidHeight
             const radius = this.parameters.planetRadius + this.parameters.fluidHeight;
