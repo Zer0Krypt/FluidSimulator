@@ -91,22 +91,37 @@ export class FluidSimulator {
         const positions = new Float32Array(this.parameters.particleCount * 3);
         const colors = new Float32Array(this.parameters.particleCount * 3);
 
-        // Calculate the area of planet surface to cover based on fluidSpread
-        const maxPhi = Math.PI * this.parameters.fluidSpread;
-        const phiStart = (Math.PI - maxPhi) / 2; // Center the fluid coverage
+        // Ensure parameters are valid
+        if (!Number.isFinite(this.parameters.planetRadius) || 
+            !Number.isFinite(this.parameters.fluidHeight)) {
+            console.error('Invalid parameters:', this.parameters);
+            return;
+        }
 
+        const radius = this.parameters.planetRadius + this.parameters.fluidHeight;
+        
         for (let i = 0; i < this.parameters.particleCount; i++) {
-            // Generate evenly distributed spherical coordinates
-            const theta = Math.random() * 2 * Math.PI;  // Longitude (0 to 2π)
-            const phi = Math.acos(1 - 2 * Math.random()); // Better distribution on sphere
+            // Use simpler distribution method initially
+            const u = Math.random() * 2 - 1; // Range: -1 to 1
+            const theta = Math.random() * Math.PI * 2; // Range: 0 to 2π
             
-            // Calculate position exactly at planet surface + fluidHeight
-            const radius = this.parameters.planetRadius + this.parameters.fluidHeight;
-            const x = radius * Math.sin(phi) * Math.cos(theta);
-            const y = radius * Math.sin(phi) * Math.sin(theta);
-            const z = radius * Math.cos(phi);
+            // Calculate position
+            const x = radius * Math.sqrt(1 - u * u) * Math.cos(theta);
+            const y = radius * Math.sqrt(1 - u * u) * Math.sin(theta);
+            const z = radius * u;
 
-            // Create particle with zero initial velocity
+            // Validate coordinates
+            if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+                console.error('Invalid coordinates generated:', { x, y, z, u, theta, radius });
+                continue;
+            }
+
+            // Set positions
+            positions[i * 3] = x;
+            positions[i * 3 + 1] = y;
+            positions[i * 3 + 2] = z;
+
+            // Create particle
             const particle = {
                 position: new THREE.Vector3(x, y, z),
                 velocity: new THREE.Vector3(0, 0, 0),
@@ -115,15 +130,18 @@ export class FluidSimulator {
             };
             this.particles.push(particle);
 
-            // Set positions and colors
-            positions[i * 3] = x;
-            positions[i * 3 + 1] = y;
-            positions[i * 3 + 2] = z;
-
-            // Blue color for water particles
+            // Set colors
             colors[i * 3] = 0.0;     // R
             colors[i * 3 + 1] = 0.5; // G
             colors[i * 3 + 2] = 1.0; // B
+        }
+
+        // Validate final arrays
+        for (let i = 0; i < positions.length; i++) {
+            if (!Number.isFinite(positions[i])) {
+                console.error('Invalid position value at index', i, positions[i]);
+                positions[i] = 0;
+            }
         }
 
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -138,6 +156,11 @@ export class FluidSimulator {
         });
 
         this.particleSystem = new THREE.Points(geometry, material);
+        
+        // Final validation
+        if (!this.particleSystem.geometry.attributes.position) {
+            console.error('Position attribute missing after creation');
+        }
     }
 
     update() {
