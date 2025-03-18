@@ -175,16 +175,35 @@ export class FluidSimulator {
             const planetForce = this.calculateGravitationalForce(particle.position, this.parameters.planetMass, this.planet.position, 1.0);
             const moonForce = this.calculateGravitationalForce(particle.position, this.parameters.moonMass, this.moon.position, 5.0);
 
-            // Calculate relative influence (0 = planet dominated, 1 = moon dominated)
+            // Calculate relative influence based on gravitational forces
             const planetInfluence = planetForce.length();
             const moonInfluence = moonForce.length();
             const totalInfluence = planetInfluence + moonInfluence;
-            const moonInfluenceRatio = moonInfluence / totalInfluence;
+            let moonInfluenceRatio = moonInfluence / totalInfluence;
 
-            // Interpolate colors
-            colors[i * 3] = planetColor.r * (1 - moonInfluenceRatio) + moonColor.r * moonInfluenceRatio;     // R
-            colors[i * 3 + 1] = planetColor.g * (1 - moonInfluenceRatio) + moonColor.g * moonInfluenceRatio; // G
-            colors[i * 3 + 2] = planetColor.b * (1 - moonInfluenceRatio) + moonColor.b * moonInfluenceRatio; // B
+            // Calculate distance-based influence
+            const maxDistance = this.parameters.moonOrbitRadius * 1.5; // Maximum meaningful distance
+            const normalizedDistanceToPlanet = Math.min(distanceToPlanet / maxDistance, 1);
+            const normalizedDistanceToMoon = Math.min(distanceToMoon / maxDistance, 1);
+            
+            // Combine gravitational and distance-based influence
+            const distanceInfluence = 1 - (normalizedDistanceToMoon / (normalizedDistanceToPlanet + normalizedDistanceToMoon));
+            
+            // Blend the two influence factors
+            moonInfluenceRatio = moonInfluenceRatio * 0.7 + distanceInfluence * 0.3;
+
+            // Add intensity variation based on total force
+            const totalForceIntensity = Math.min((totalInfluence / (planetInfluence + moonInfluence)) * 2, 1);
+            
+            // Calculate final color with intensity
+            const r = (planetColor.r * (1 - moonInfluenceRatio) + moonColor.r * moonInfluenceRatio) * totalForceIntensity;
+            const g = (planetColor.g * (1 - moonInfluenceRatio) + moonColor.g * moonInfluenceRatio) * totalForceIntensity;
+            const b = (planetColor.b * (1 - moonInfluenceRatio) + moonColor.b * moonInfluenceRatio) * totalForceIntensity;
+
+            // Apply colors
+            colors[i * 3] = r;     // R
+            colors[i * 3 + 1] = g; // G
+            colors[i * 3 + 2] = b; // B
 
             // Handle moon collisions first (priority over planet)
             if (distanceToMoon < this.parameters.moonRadius) {
