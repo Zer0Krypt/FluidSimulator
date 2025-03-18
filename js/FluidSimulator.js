@@ -44,7 +44,7 @@ export class FluidSimulator {
 
     createMoon() {
         const geometry = new THREE.SphereGeometry(this.parameters.moonRadius, 32, 32);
-        const material = new THREE.MeshPhongMaterial({ color: 0x888888 });
+        const material = new THREE.MeshPhongMaterial({ color: 0x800080 });  // Changed to purple (hex code)
         const moon = new THREE.Mesh(geometry, material);
         
         // Calculate initial position directly instead of using updateMoonPosition
