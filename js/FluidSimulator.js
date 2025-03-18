@@ -158,17 +158,17 @@ export class FluidSimulator {
                 const normal = toCenter.normalize();
                 particle.position.copy(this.planet.position.clone().sub(normal.multiplyScalar(this.parameters.planetRadius)));
                 
-                // Almost completely kill the velocity on collision
-                particle.velocity.multiplyScalar(0.01);
+                // Project velocity onto surface plane (maintain tangential velocity)
+                const normalVelocity = normal.multiplyScalar(particle.velocity.dot(normal));
+                const tangentialVelocity = particle.velocity.clone().sub(normalVelocity);
                 
-                // Add a small outward push to prevent sticking
-                const outwardVelocity = normal.multiplyScalar(0.05);
-                particle.velocity.add(outwardVelocity);
+                // Keep tangential velocity but reduce it for friction
+                particle.velocity.copy(tangentialVelocity.multiplyScalar(0.8));
             }
             
             // Add gentler surface tension force
             const targetRadius = this.parameters.planetRadius + this.parameters.fluidHeight;
-            const surfaceForceMagnitude = (distanceToCenter - targetRadius) * 0.5; // Much weaker force
+            const surfaceForceMagnitude = (distanceToCenter - targetRadius) * 0.8;
             const surfaceForce = toCenter.normalize().multiplyScalar(surfaceForceMagnitude);
             
             // Combine all forces
@@ -176,12 +176,26 @@ export class FluidSimulator {
                 .add(moonForce)
                 .add(surfaceForce);
             
-            // Add stronger general damping
-            particle.velocity.multiplyScalar(0.98);
+            // Apply general damping
+            particle.velocity.multiplyScalar(0.99);
             
             // Update velocity and position with smaller time step
-            const scaledDeltaTime = deltaTime * 0.1; // Even smaller time step
-            particle.velocity.add(totalForce.multiplyScalar(scaledDeltaTime));
+            const scaledDeltaTime = deltaTime * 0.1;
+            
+            // If particle is near surface, only apply forces parallel to surface
+            if (Math.abs(distanceToCenter - this.parameters.planetRadius) < 0.1) {
+                const normal = toCenter.normalize();
+                const forceDotNormal = totalForce.dot(normal);
+                const normalForce = normal.multiplyScalar(forceDotNormal);
+                const tangentialForce = totalForce.clone().sub(normalForce);
+                
+                // Allow slight normal force to prevent sticking
+                particle.velocity.add(tangentialForce.multiplyScalar(scaledDeltaTime));
+                particle.velocity.add(normalForce.multiplyScalar(scaledDeltaTime * 0.1));
+            } else {
+                particle.velocity.add(totalForce.multiplyScalar(scaledDeltaTime));
+            }
+            
             particle.position.add(particle.velocity.clone().multiplyScalar(scaledDeltaTime));
 
             // Update geometry
@@ -263,6 +277,7 @@ export class FluidSimulator {
         return this.particleSystem;
     }
 }
+
 
 
 
