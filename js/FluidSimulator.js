@@ -4,30 +4,35 @@ export class FluidSimulator {
     constructor() {
         this.particles = [];
         this.parameters = {
-            // Planet parameters (Earth)
-            planetRadius: 6.371e6,          // Earth radius in meters
-            planetMass: 5.972e24,          // Earth mass in kg
+            // Real physical values (for calculations)
+            realPlanetRadius: 6.371e6,     // Earth radius in meters
+            realPlanetMass: 5.972e24,      // Earth mass in kg
+            realMoonRadius: 1.737e6,       // Moon radius in meters
+            realMoonMass: 7.34767309e22,   // Moon mass in kg
+            realMoonOrbitRadius: 3.844e8,  // Average Earth-Moon distance in meters
             
-            // Moon parameters
-            moonRadius: 1.737e6,           // Moon radius in meters
-            moonMass: 7.34767309e22,      // Moon mass in kg
-            moonOrbitRadius: 3.844e8,      // Average Earth-Moon distance in meters
+            // Visualization scale (for rendering)
+            visualScale: 1e-5,             // Scale factor for visualization
+            
+            // Scaled values (for rendering)
+            planetRadius: 10,              // Scaled radius for visualization
+            moonRadius: 2.7,              // Scaled radius for visualization
+            moonOrbitRadius: 50,          // Scaled orbit for visualization
             moonInitialAngle: 0,
             moonOrbitalSpeed: 2.662e-6,    // Radians per second (27.32 days period)
             
-            // Fluid parameters (Water)
+            // Fluid parameters
             particleCount: 1000,
             particleSize: 0.1,
-            fluidHeight: 10000,            // Average ocean depth in meters
+            fluidHeight: 0.2,              // Scaled ocean depth for visualization
             fluidSpread: 0.8,              // 80% of Earth covered by water
             
-            // Physics parameters
+            // Physics parameters (real values)
             gravity: -9.81,                // m/s²
             viscosity: 1.002e-3,           // Water viscosity at 20°C (Pa·s)
             density: 1000,                 // Water density kg/m³
             gravitationalConstant: 6.67430e-11,  // m³ kg⁻¹ s⁻²
-            timeScale: 1.0,
-            scale: 1e-6                    // Scale factor to make visualization manageable
+            timeScale: 1.0
         };
 
         this.planet = this.createPlanet();
@@ -38,7 +43,7 @@ export class FluidSimulator {
 
     createPlanet() {
         const geometry = new THREE.SphereGeometry(this.parameters.planetRadius, 32, 32);
-        const material = new THREE.MeshPhongMaterial({ color: 0x44aa44 });  // Changed to green
+        const material = new THREE.MeshPhongMaterial({ color: 0x44aa44 });
         return new THREE.Mesh(geometry, material);
     }
 
@@ -47,7 +52,7 @@ export class FluidSimulator {
         const material = new THREE.MeshPhongMaterial({ color: 0x888888 });
         const moon = new THREE.Mesh(geometry, material);
         
-        // Calculate initial position directly instead of using updateMoonPosition
+        // Set initial position using visualization scale
         const angle = this.parameters.moonInitialAngle;
         const x = Math.cos(angle) * this.parameters.moonOrbitRadius;
         const z = Math.sin(angle) * this.parameters.moonOrbitRadius;
@@ -204,19 +209,22 @@ export class FluidSimulator {
         this.particleSystem.geometry.attributes.position.needsUpdate = true;
     }
 
-    calculateGravitationalForce(particlePos, bodyMass, bodyPos, multiplier = 1.0) {
+    calculateGravitationalForce(particlePos, bodyMass, bodyPos) {
         const direction = bodyPos.clone().sub(particlePos);
-        const distance = direction.length() / this.parameters.scale;  // Convert to real distance
+        // Convert visualization distance to real distance
+        const realDistance = direction.length() / this.parameters.visualScale;
         
-        // Use real gravitational formula
-        const forceMagnitude = (this.parameters.gravitationalConstant * bodyMass) / (distance * distance);
+        // Calculate force using real values
+        const forceMagnitude = (this.parameters.gravitationalConstant * bodyMass) / 
+            (realDistance * realDistance);
         
-        // Add tidal force component (varies with inverse cube of distance)
+        // Add tidal force component
         const tidalForceMagnitude = (2 * this.parameters.gravitationalConstant * bodyMass * 
-            this.parameters.fluidHeight) / (distance * distance * distance);
+            this.parameters.fluidHeight) / (realDistance * realDistance * realDistance);
         
+        // Scale force back for visualization
         return direction.normalize().multiplyScalar((forceMagnitude + tidalForceMagnitude) * 
-            this.parameters.scale * multiplier);
+            this.parameters.visualScale);
     }
 
     setParameter(name, value) {
@@ -291,6 +299,7 @@ export class FluidSimulator {
         return tangent;
     }
 }
+
 
 
 
