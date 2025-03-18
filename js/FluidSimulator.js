@@ -280,7 +280,7 @@ export class FluidSimulator {
                 this.orbitLine.geometry.dispose();
                 this.orbitLine.geometry = this.createOrbitLine().geometry;
             }
-            if (['planetRadius'].includes(name)) {
+            else if (['planetRadius'].includes(name)) {
                 this.planet.geometry = new THREE.SphereGeometry(this.parameters.planetRadius, 32, 32);
                 
                 // Instead of full reinitialization, adjust particle positions relative to new radius
@@ -307,6 +307,22 @@ export class FluidSimulator {
                 }
                 
                 this.particleSystem.geometry.attributes.position.needsUpdate = true;
+            }
+            else if (name === 'particleCount') {
+                // Clean up old particle system
+                if (this.particleSystem) {
+                    this.particleSystem.geometry.dispose();
+                    this.particleSystem.material.dispose();
+                }
+                
+                // Reinitialize particles with new count
+                this.initializeParticles();
+                
+                // Make sure the scene gets updated with the new particle system
+                // We need to emit an event or notify the main app to update the scene
+                if (this.onParticleSystemUpdate) {
+                    this.onParticleSystemUpdate(this.particleSystem);
+                }
             }
         }
     }

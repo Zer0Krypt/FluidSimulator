@@ -14,6 +14,18 @@ class SimulationApp {
         });
         
         this.fluidSimulator = new FluidSimulator();
+        
+        // Add handler for particle system updates
+        this.fluidSimulator.onParticleSystemUpdate = (newParticleSystem) => {
+            // Remove old particle system if it exists
+            const oldSystem = this.scene.children.find(child => child instanceof THREE.Points);
+            if (oldSystem) {
+                this.scene.remove(oldSystem);
+            }
+            // Add new particle system
+            this.scene.add(newParticleSystem);
+        };
+        
         this.scenarioManager = new ScenarioManager();
         this.uiController = new UIController(this);
         
@@ -108,6 +120,7 @@ class SimulationApp {
 }
 
 const app = new SimulationApp();
+
 
 
 
