@@ -14,6 +14,8 @@ class SimulationApp {
         });
         
         this.fluidSimulator = new FluidSimulator();
+        // Set initial timeScale to 0 to pause simulation
+        this.fluidSimulator.setParameter('timeScale', 0.0);
         
         // Add handler for particle system updates
         this.fluidSimulator.onParticleSystemUpdate = (newParticleSystem) => {
@@ -120,6 +122,7 @@ class SimulationApp {
 }
 
 const app = new SimulationApp();
+
 
 
 

@@ -1,7 +1,7 @@
 export class UIController {
     constructor(app) {
         this.app = app;
-        this.isPlaying = false;
+        this.isPlaying = false;  // Start paused
         this.setupEventListeners();
         this.createControls();
         this.debounceTimeout = null;
@@ -285,6 +285,7 @@ export class UIController {
         }
     }
 }
+
 
 
 
