@@ -53,6 +53,15 @@ export class UIController {
                     default: 1000.0, 
                     label: 'Planet Mass',
                     tooltip: 'Mass of the planet. Higher values create stronger gravitational pull, lower values allow particles to float more freely.'
+                },
+                { 
+                    name: 'planetRotationSpeed', 
+                    min: -2.0, 
+                    max: 2.0, 
+                    step: 0.1, 
+                    default: 0.0, 
+                    label: 'Planet Rotation',
+                    tooltip: 'Rotation speed of the planet. Positive values rotate with orbit direction, negative values rotate against it.'
                 }
             ],
             moon: [
@@ -91,6 +100,15 @@ export class UIController {
                     default: 0.5, 
                     label: 'Orbital Speed',
                     tooltip: 'Speed of moon\'s orbit. Higher values make the moon orbit faster, lower values create slower orbits.'
+                },
+                { 
+                    name: 'moonRotationSpeed', 
+                    min: -2.0, 
+                    max: 2.0, 
+                    step: 0.1, 
+                    default: 0.0, 
+                    label: 'Moon Rotation',
+                    tooltip: 'Rotation speed of the moon. Positive values rotate with orbit direction, negative values rotate against it.'
                 }
             ],
             fluid: [
@@ -285,6 +303,7 @@ export class UIController {
         }
     }
 }
+
 
 
 

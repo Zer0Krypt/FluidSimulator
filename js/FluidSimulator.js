@@ -34,6 +34,14 @@ export class FluidSimulator {
             surfaceTensionRadius: 1.0,      // Radius within which particles affect each other
             cohesionStrength: 0.5,          // Strength of particle cohesion
             tensionResistance: 0.3          // Resistance to stretching/separation
+
+            // Add rotation parameters
+            planetRotationSpeed: 0.0,
+            moonRotationSpeed: 0.0,
+            
+            // Track current rotation angles
+            planetRotationAngle: 0,
+            moonRotationAngle: 0
         };
 
         // Clone default parameters for current use
@@ -49,20 +57,32 @@ export class FluidSimulator {
         this._tempVec2 = new THREE.Vector3();
         this._tempVec3 = new THREE.Vector3();
         this._tempVec4 = new THREE.Vector3();
+
+        // Add rotation axis
+        this.rotationAxis = new THREE.Vector3(0, 1, 0);
     }
 
     createPlanet() {
         const geometry = new THREE.SphereGeometry(this.parameters.planetRadius, 32, 32);
-        const material = new THREE.MeshPhongMaterial({ color: 0x44aa44 });  // Changed to green
+        const material = new THREE.MeshPhongMaterial({ 
+            color: 0x44aa44,
+            // Add some surface texture or pattern to make rotation visible
+            bumpMap: this.createRotationTexture(),
+            bumpScale: 0.1
+        });
         return new THREE.Mesh(geometry, material);
     }
 
     createMoon() {
         const geometry = new THREE.SphereGeometry(this.parameters.moonRadius, 32, 32);
-        const material = new THREE.MeshPhongMaterial({ color: 0x800080 });  // Changed to purple (hex code)
+        const material = new THREE.MeshPhongMaterial({ 
+            color: 0x800080,
+            // Add some surface texture or pattern to make rotation visible
+            bumpMap: this.createRotationTexture(),
+            bumpScale: 0.1
+        });
         const moon = new THREE.Mesh(geometry, material);
         
-        // Calculate initial position directly instead of using updateMoonPosition
         const angle = this.parameters.moonInitialAngle;
         const x = Math.cos(angle) * this.parameters.moonOrbitRadius;
         const z = Math.sin(angle) * this.parameters.moonOrbitRadius;
@@ -93,6 +113,26 @@ export class FluidSimulator {
         const x = Math.cos(angle) * this.parameters.moonOrbitRadius;
         const z = Math.sin(angle) * this.parameters.moonOrbitRadius;
         this.moon.position.set(x, 0, z);
+    }
+
+    createRotationTexture() {
+        // Create a simple texture to make rotation visible
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        
+        // Draw some patterns
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, 64, 64);
+        ctx.fillStyle = '#cccccc';
+        ctx.fillRect(0, 0, 32, 32);
+        ctx.fillRect(32, 32, 32, 32);
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        return texture;
     }
 
     initializeParticles() {
@@ -152,8 +192,16 @@ export class FluidSimulator {
 
     update() {
         const deltaTime = this.parameters.timeScale * 0.016;
-        
-        // Update moon position only when needed (every few frames)
+
+        // Update rotations
+        this.parameters.planetRotationAngle += this.parameters.planetRotationSpeed * deltaTime;
+        this.parameters.moonRotationAngle += this.parameters.moonRotationSpeed * deltaTime;
+
+        // Apply rotations
+        this.planet.rotation.y = this.parameters.planetRotationAngle;
+        this.moon.rotation.y = this.parameters.moonRotationAngle;
+
+        // Update moon orbital position
         if (this.frameCount % 3 === 0) {
             const currentAngle = Math.atan2(this.moon.position.z, this.moon.position.x);
             const newAngle = currentAngle + this.parameters.moonOrbitalSpeed * deltaTime * 3;
@@ -340,6 +388,13 @@ export class FluidSimulator {
                 if (this.onParticleSystemUpdate) {
                     this.onParticleSystemUpdate(this.particleSystem);
                 }
+            }
+            // Reset rotation angles when speeds are changed to zero
+            else if (name === 'planetRotationSpeed' && value === 0) {
+                this.parameters.planetRotationAngle = 0;
+            }
+            else if (name === 'moonRotationSpeed' && value === 0) {
+                this.parameters.moonRotationAngle = 0;
             }
         }
     }
