@@ -195,6 +195,11 @@ export class FluidSimulator {
             particles: this.particleSystem
         };
     }
+
+    getParticleSystem() {
+        return this.particleSystem;
+    }
 }
+
 
 
