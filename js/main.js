@@ -17,6 +17,9 @@ class SimulationApp {
         this.scenarioManager = new ScenarioManager();
         this.uiController = new UIController(this);
         
+        // Add particle system to the scene
+        this.scene.add(this.fluidSimulator.getParticleSystem());
+        
         this.init();
     }
 
@@ -32,7 +35,7 @@ class SimulationApp {
 
     setupRenderer() {
         this.renderer.setSize(window.innerWidth - 300, window.innerHeight);
-        this.renderer.setClearColor(0x000000);
+        this.renderer.setClearColor(0x202020); // Change background color to dark gray
     }
 
     setupCamera() {
@@ -92,4 +95,5 @@ class SimulationApp {
 }
 
 const app = new SimulationApp();
+
 

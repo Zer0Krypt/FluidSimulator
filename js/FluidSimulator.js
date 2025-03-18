@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 export class FluidSimulator {
-    constructor(renderer) {
+    constructor() {
         this.particles = [];
         this.parameters = {
             gravity: -9.81,
@@ -153,7 +153,9 @@ export class FluidSimulator {
     }
 
     updateScale() {
-        this.particleSystem.material.size = this.parameters.particleSize * this.parameters.scale;
+        if (this.particleSystem) {
+            this.particleSystem.material.size = this.parameters.particleSize * this.parameters.scale;
+        }
     }
 
     getParticleSystem() {
@@ -173,29 +175,39 @@ export class FluidSimulator {
         const positions = new Float32Array(this.parameters.particleCount * 3);
         const colors = new Float32Array(this.parameters.particleCount * 3);
 
-        // Initialize particles with positions and velocities
-        for (let i = 0; i < this.parameters.particleCount; i++) {
-            const particle = {
-                position: new THREE.Vector3(
-                    Math.random() * 2 - 1,
-                    Math.random() * 2 - 1,
-                    Math.random() * 2 - 1
-                ),
-                velocity: new THREE.Vector3(0, 0, 0),
-                density: 0,
-                pressure: 0
-            };
-            this.particles.push(particle);
+        // Initialize particles in a more visible arrangement (cube formation)
+        const size = Math.ceil(Math.pow(this.parameters.particleCount, 1/3));
+        const spacing = 0.2;
+        let index = 0;
 
-            // Set initial positions in geometry
-            positions[i * 3] = particle.position.x;
-            positions[i * 3 + 1] = particle.position.y;
-            positions[i * 3 + 2] = particle.position.z;
+        for (let x = 0; x < size && index < this.parameters.particleCount; x++) {
+            for (let y = 0; y < size && index < this.parameters.particleCount; y++) {
+                for (let z = 0; z < size && index < this.parameters.particleCount; z++) {
+                    const particle = {
+                        position: new THREE.Vector3(
+                            (x - size/2) * spacing,
+                            (y - size/2) * spacing + 5, // Lift particles up
+                            (z - size/2) * spacing
+                        ),
+                        velocity: new THREE.Vector3(0, 0, 0),
+                        density: 0,
+                        pressure: 0
+                    };
+                    this.particles.push(particle);
 
-            // Set particle colors
-            colors[i * 3] = 0.5;
-            colors[i * 3 + 1] = 0.7;
-            colors[i * 3 + 2] = 1.0;
+                    // Set initial positions in geometry
+                    positions[index * 3] = particle.position.x;
+                    positions[index * 3 + 1] = particle.position.y;
+                    positions[index * 3 + 2] = particle.position.z;
+
+                    // Set particle colors (blue with slight variation)
+                    colors[index * 3] = 0.3 + Math.random() * 0.2;     // R
+                    colors[index * 3 + 1] = 0.5 + Math.random() * 0.2; // G
+                    colors[index * 3 + 2] = 0.8 + Math.random() * 0.2; // B
+
+                    index++;
+                }
+            }
         }
 
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -215,8 +227,11 @@ export class FluidSimulator {
             });
             this.particleSystem = new THREE.Points(geometry, material);
         }
+
+        this.updateScale();
     }
 }
+
 
 
 
