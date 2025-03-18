@@ -166,15 +166,57 @@ export class FluidSimulator {
             const moonForce = this.calculateGravitationalForce(particle.position, 
                 this.parameters.moonMass, this.moon.position, 1.0);
             
-            // Calculate Coriolis effect (due to Earth's rotation)
-            const angularVelocity = 7.2722e-5;  // Earth's rotation rate (rad/s)
-            const coriolisForce = new THREE.Vector3(
-                2 * angularVelocity * particle.velocity.z,
-                0,
-                -2 * angularVelocity * particle.velocity.x
-            ).multiplyScalar(this.parameters.scale);
-
-            // Combine all forces
+            // Handle moon collisions first (priority over planet)
+            if (distanceToMoon < this.parameters.moonRadius) {
+                const normal = toMoon.normalize();
+                
+                // Move particle to moon surface
+                particle.position.copy(this.moon.position.clone().sub(normal.multiplyScalar(this.parameters.moonRadius)));
+                
+                // Add random tangential velocity for distribution around moon surface
+                const randomTangent = this.getRandomTangentialVector(normal);
+                const distributionSpeed = 0.05;  // Reduced speed for gentler spreading
+                
+                // Set velocity for spreading along moon surface
+                particle.velocity.copy(randomTangent.multiplyScalar(distributionSpeed));
+                
+                // Add slight outward force to prevent clumping
+                const surfaceRepulsion = normal.multiplyScalar(0.02);
+                particle.velocity.add(surfaceRepulsion);
+                
+                // Apply strong damping to keep movement gentle
+                particle.velocity.multiplyScalar(0.9);
+            }
+            // Handle planet surface interaction
+            if (distanceToPlanet < this.parameters.planetRadius + this.parameters.fluidHeight) {
+                const normal = toPlanet.normalize();
+                
+                // Simply keep particles at exact surface level
+                const targetRadius = this.parameters.planetRadius + this.parameters.fluidHeight;
+                particle.position.copy(this.planet.position.clone().add(normal.multiplyScalar(targetRadius)));
+                
+                // Add very gentle circular motion for ocean current
+                const rotationAxis = new THREE.Vector3(0, 1, 0);
+                const tangentDir = new THREE.Vector3().crossVectors(normal, rotationAxis).normalize();
+                particle.velocity.copy(tangentDir.multiplyScalar(0.01));
+            }
+            
+            // Calculate surface tension and distribution forces
+            let surfaceForce = new THREE.Vector3(0, 0, 0);
+            
+            if (distanceToMoon < distanceToPlanet) {
+                // Moon surface tension with distribution
+                const targetRadius = this.parameters.moonRadius + (this.parameters.fluidHeight * 0.2);
+                const surfaceForceMagnitude = (distanceToMoon - targetRadius) * 0.8;
+                surfaceForce.add(toMoon.normalize().multiplyScalar(surfaceForceMagnitude));
+            } else {
+                // Planet surface tension - gentler for ocean-like behavior
+                const targetRadius = this.parameters.planetRadius + this.parameters.fluidHeight;
+                const surfaceForceMagnitude = (distanceToPlanet - targetRadius) * 0.3;
+                surfaceForce.add(toPlanet.normalize().multiplyScalar(surfaceForceMagnitude));
+            }
+            
+            // Combine forces
             const totalForce = planetForce.clone()
                 .add(moonForce)
                 .add(coriolisForce);
@@ -299,26 +341,4 @@ export class FluidSimulator {
         return tangent;
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
