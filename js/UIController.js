@@ -4,12 +4,31 @@ export class UIController {
         this.isPlaying = false;
         this.setupEventListeners();
         this.createControls();
+        this.debounceTimeout = null;
     }
 
     setupEventListeners() {
-        document.getElementById('play-pause').addEventListener('click', () => this.toggleSimulation());
-        document.getElementById('reset').addEventListener('click', () => this.resetSimulation());
-        document.getElementById('seed').addEventListener('change', (e) => this.loadScenario(e.target.value));
+        document.getElementById('play-pause').addEventListener('click', () => {
+            requestAnimationFrame(() => this.toggleSimulation());
+        });
+        
+        document.getElementById('reset').addEventListener('click', () => {
+            requestAnimationFrame(() => this.resetSimulation());
+        });
+        
+        document.getElementById('seed').addEventListener('change', (e) => {
+            this.debounceLoadScenario(e.target.value);
+        });
+    }
+
+    debounceLoadScenario(seed) {
+        if (this.debounceTimeout) {
+            clearTimeout(this.debounceTimeout);
+        }
+        
+        this.debounceTimeout = setTimeout(() => {
+            requestAnimationFrame(() => this.loadScenario(seed));
+        }, 250);
     }
 
     createControls() {
@@ -83,26 +102,59 @@ export class UIController {
         this.isPlaying = !this.isPlaying;
         const button = document.getElementById('play-pause');
         button.textContent = this.isPlaying ? 'Pause' : 'Play';
+        
+        // Update simulator and animation state
         this.app.fluidSimulator.setParameter('timeScale', this.isPlaying ? 1.0 : 0.0);
+        this.app.toggleAnimation(this.isPlaying);
     }
 
     resetSimulation() {
-        this.app.fluidSimulator.initializeParticles(this.app.fluidSimulator.parameters.particleCount);
+        // Pause simulation during reset
+        const wasPlaying = this.isPlaying;
+        if (wasPlaying) {
+            this.toggleSimulation();
+        }
+        
+        // Reset particles
+        this.app.fluidSimulator.initializeParticles(
+            this.app.fluidSimulator.parameters.particleCount
+        );
+        
+        // Resume if it was playing
+        if (wasPlaying) {
+            this.toggleSimulation();
+        }
     }
 
     loadScenario(seed) {
+        // Pause simulation during load
+        const wasPlaying = this.isPlaying;
+        if (wasPlaying) {
+            this.toggleSimulation();
+        }
+        
         const scenario = this.app.scenarioManager.loadScenario(seed);
         if (scenario) {
-            // Update simulator parameters
-            Object.entries(scenario.parameters).forEach(([name, value]) => {
-                this.app.fluidSimulator.setParameter(name, value);
-                this.updateControlValue(name, value);
+            // Update simulator parameters in batches
+            requestAnimationFrame(() => {
+                Object.entries(scenario.parameters).forEach(([name, value]) => {
+                    this.app.fluidSimulator.setParameter(name, value);
+                    this.updateControlValue(name, value);
+                });
+                
+                // Reset simulation with new parameters
+                this.app.fluidSimulator.initializeParticles();
+                
+                // Resume if it was playing
+                if (wasPlaying) {
+                    this.toggleSimulation();
+                }
             });
-            
-            // Reset simulation with new parameters
-            this.app.fluidSimulator.initializeParticles();
         } else {
             console.warn('Failed to load scenario. Using default parameters.');
+            if (wasPlaying) {
+                this.toggleSimulation();
+            }
         }
     }
 
@@ -114,4 +166,5 @@ export class UIController {
         }
     }
 }
+
 

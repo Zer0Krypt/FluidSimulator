@@ -58,9 +58,19 @@ class SimulationApp {
     }
 
     animate() {
-        requestAnimationFrame(() => this.animate());
-        this.controls.update();
-        this.fluidSimulator.update();
+        // Use RAF ID to potentially cancel animation
+        this.animationId = requestAnimationFrame(() => this.animate());
+        
+        // Only update if simulation is actually running
+        if (this.fluidSimulator.parameters.timeScale > 0) {
+            this.fluidSimulator.update();
+        }
+        
+        // Only update controls if they're being used
+        if (this.controls.enabled && this.controls.isDragging) {
+            this.controls.update();
+        }
+        
         this.renderer.render(this.scene, this.camera);
     }
 
@@ -69,6 +79,17 @@ class SimulationApp {
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(window.innerWidth - 300, window.innerHeight);
     }
+
+    // Add method to pause/resume animation
+    toggleAnimation(isPlaying) {
+        if (!isPlaying && this.animationId) {
+            cancelAnimationFrame(this.animationId);
+            this.animationId = null;
+        } else if (isPlaying && !this.animationId) {
+            this.animate();
+        }
+    }
 }
 
 const app = new SimulationApp();
+
