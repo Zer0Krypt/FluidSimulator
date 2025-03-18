@@ -158,18 +158,22 @@ export class FluidSimulator {
                 const normal = toCenter.normalize();
                 particle.position.copy(this.planet.position.clone().sub(normal.multiplyScalar(this.parameters.planetRadius)));
                 
-                // Calculate reflection vector for velocity
-                const dot = particle.velocity.dot(normal);
-                const reflection = normal.multiplyScalar(2 * dot);
-                particle.velocity.sub(reflection);
+                // Calculate normal and tangential components of velocity
+                const normalVelocity = normal.multiplyScalar(particle.velocity.dot(normal));
+                const tangentialVelocity = particle.velocity.clone().sub(normalVelocity);
                 
-                // Add friction and damping on collision
-                particle.velocity.multiplyScalar(0.8);
+                // Heavily reduce normal velocity (reduces bouncing)
+                normalVelocity.multiplyScalar(-0.1);
+                // Apply friction to tangential velocity
+                tangentialVelocity.multiplyScalar(0.8);
+                
+                // Combine velocities
+                particle.velocity.copy(normalVelocity.add(tangentialVelocity));
             }
             
             // Add surface tension force to keep particles near planet surface
             const targetRadius = this.parameters.planetRadius + this.parameters.fluidHeight;
-            const surfaceForceMagnitude = (distanceToCenter - targetRadius) * 5.0;
+            const surfaceForceMagnitude = (distanceToCenter - targetRadius) * 2.0; // Reduced strength
             const surfaceForce = toCenter.normalize().multiplyScalar(surfaceForceMagnitude);
             
             // Combine all forces
@@ -180,7 +184,7 @@ export class FluidSimulator {
             // Reduced damping to allow more movement
             particle.velocity.multiplyScalar(0.995);
             
-            // Update velocity and position
+            // Update velocity and position with smaller time step
             const scaledDeltaTime = deltaTime * 0.2;
             particle.velocity.add(totalForce.multiplyScalar(scaledDeltaTime));
             particle.position.add(particle.velocity.clone().multiplyScalar(scaledDeltaTime));
@@ -264,6 +268,7 @@ export class FluidSimulator {
         return this.particleSystem;
     }
 }
+
 
 
 
