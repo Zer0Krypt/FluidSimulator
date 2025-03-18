@@ -27,7 +27,13 @@ export class FluidSimulator {
             density: 1000.0,
             gravitationalConstant: 6.67430e-11,
             timeScale: 1.0,
-            scale: 1.0
+            scale: 1.0,
+            
+            // Surface tension parameters
+            surfaceTensionStrength: 0.8,    // Strength of surface tension between particles
+            surfaceTensionRadius: 1.0,      // Radius within which particles affect each other
+            cohesionStrength: 0.5,          // Strength of particle cohesion
+            tensionResistance: 0.3          // Resistance to stretching/separation
         };
 
         // Clone default parameters for current use
@@ -140,71 +146,113 @@ export class FluidSimulator {
 
     update() {
         const deltaTime = this.parameters.timeScale * 0.016;
-
-        // Update moon position
-        const currentAngle = Math.atan2(this.moon.position.z, this.moon.position.x);
-        const newAngle = currentAngle + this.parameters.moonOrbitalSpeed * deltaTime;
-        this.updateMoonPosition(newAngle);
-
-        // Update particles
-        const positions = this.particleSystem.geometry.attributes.position.array;
-        const colors = this.particleSystem.geometry.attributes.color.array;
-
-        // Define colors in RGB format (0-1 range)
-        const planetColor = {
-            r: 0x44 / 0xff,
-            g: 0xaa / 0xff,
-            b: 0x44 / 0xff
-        };
-        const moonColor = {
-            r: 0x80 / 0xff,
-            g: 0x00 / 0xff,
-            b: 0x80 / 0xff
-        };
-
+        
+        // First pass: Calculate particle neighborhoods and surface tension
+        const neighborhoods = new Map(); // Store neighboring particles for each particle
+        
         for (let i = 0; i < this.particles.length; i++) {
             const particle = this.particles[i];
+            neighborhoods.set(particle, []);
             
-            // Calculate distances to both bodies
+            // Find neighboring particles
+            for (let j = 0; j < this.particles.length; j++) {
+                if (i === j) continue;
+                
+                const neighbor = this.particles[j];
+                const distance = particle.position.distanceTo(neighbor.position);
+                
+                if (distance < this.parameters.surfaceTensionRadius) {
+                    neighborhoods.get(particle).push({
+                        particle: neighbor,
+                        distance: distance
+                    });
+                }
+            }
+        }
+        
+        // Second pass: Update particles with all forces including surface tension
+        for (let i = 0; i < this.particles.length; i++) {
+            const particle = this.particles[i];
+            const neighbors = neighborhoods.get(particle);
+            
+            // Calculate base gravitational forces
             const toPlanet = this.planet.position.clone().sub(particle.position);
             const toMoon = this.moon.position.clone().sub(particle.position);
             const distanceToPlanet = toPlanet.length();
             const distanceToMoon = toMoon.length();
-
-            // Calculate gravitational forces
+            
             const planetForce = this.calculateGravitationalForce(particle.position, this.parameters.planetMass, this.planet.position, 1.0);
             const moonForce = this.calculateGravitationalForce(particle.position, this.parameters.moonMass, this.moon.position, 5.0);
-
-            // Calculate relative influence based on gravitational forces
-            const planetInfluence = planetForce.length();
-            const moonInfluence = moonForce.length();
-            const totalInfluence = planetInfluence + moonInfluence;
-            let moonInfluenceRatio = moonInfluence / totalInfluence;
-
-            // Calculate distance-based influence
-            const maxDistance = this.parameters.moonOrbitRadius * 1.5; // Maximum meaningful distance
-            const normalizedDistanceToPlanet = Math.min(distanceToPlanet / maxDistance, 1);
-            const normalizedDistanceToMoon = Math.min(distanceToMoon / maxDistance, 1);
             
-            // Combine gravitational and distance-based influence
-            const distanceInfluence = 1 - (normalizedDistanceToMoon / (normalizedDistanceToPlanet + normalizedDistanceToMoon));
+            // Calculate surface tension force
+            const surfaceTensionForce = new THREE.Vector3(0, 0, 0);
             
-            // Blend the two influence factors
-            moonInfluenceRatio = moonInfluenceRatio * 0.7 + distanceInfluence * 0.3;
-
-            // Add intensity variation based on total force
-            const totalForceIntensity = Math.min((totalInfluence / (planetInfluence + moonInfluence)) * 2, 1);
+            if (neighbors.length > 0) {
+                // Calculate average position of neighbors
+                const centerOfMass = new THREE.Vector3();
+                neighbors.forEach(({particle: neighbor}) => {
+                    centerOfMass.add(neighbor.position);
+                });
+                centerOfMass.divideScalar(neighbors.length);
+                
+                // Cohesion force towards center of mass
+                const cohesionForce = centerOfMass.sub(particle.position)
+                    .multiplyScalar(this.parameters.cohesionStrength);
+                
+                // Surface tension force
+                neighbors.forEach(({particle: neighbor, distance}) => {
+                    const direction = neighbor.position.clone().sub(particle.position);
+                    const tensionFactor = 1 - (distance / this.parameters.surfaceTensionRadius);
+                    
+                    // Add tension force
+                    const tensionForce = direction.normalize()
+                        .multiplyScalar(tensionFactor * this.parameters.surfaceTensionStrength);
+                    surfaceTensionForce.add(tensionForce);
+                    
+                    // Add resistance to stretching
+                    if (distance > this.parameters.surfaceTensionRadius * 0.8) {
+                        const resistanceForce = direction.multiplyScalar(
+                            this.parameters.tensionResistance * (distance - this.parameters.surfaceTensionRadius * 0.8)
+                        );
+                        surfaceTensionForce.add(resistanceForce);
+                    }
+                });
+                
+                surfaceTensionForce.add(cohesionForce);
+            }
             
-            // Calculate final color with intensity
-            const r = (planetColor.r * (1 - moonInfluenceRatio) + moonColor.r * moonInfluenceRatio) * totalForceIntensity;
-            const g = (planetColor.g * (1 - moonInfluenceRatio) + moonColor.g * moonInfluenceRatio) * totalForceIntensity;
-            const b = (planetColor.b * (1 - moonInfluenceRatio) + moonColor.b * moonInfluenceRatio) * totalForceIntensity;
-
-            // Apply colors
-            colors[i * 3] = r;     // R
-            colors[i * 3 + 1] = g; // G
-            colors[i * 3 + 2] = b; // B
-
+            // Calculate moon's pull on the surface tension network
+            let moonPullOnNetwork = new THREE.Vector3();
+            if (neighbors.length > 0) {
+                const moonForceStrength = moonForce.length();
+                const normalizedMoonForce = moonForce.clone().normalize();
+                
+                // Scale the network pull based on moon's force and neighbor count
+                const networkPullStrength = moonForceStrength * 
+                    (neighbors.length / this.parameters.particleCount) * 
+                    this.parameters.tensionResistance;
+                
+                moonPullOnNetwork = normalizedMoonForce.multiplyScalar(networkPullStrength);
+            }
+            
+            // Combine all forces
+            const totalForce = planetForce.clone()
+                .add(moonForce)
+                .add(surfaceTensionForce)
+                .add(moonPullOnNetwork);
+            
+            // Update velocity and position with combined forces
+            const scaledDeltaTime = deltaTime * 0.08;
+            particle.velocity.add(totalForce.multiplyScalar(scaledDeltaTime));
+            particle.velocity.multiplyScalar(0.995); // Damping
+            particle.position.add(particle.velocity.clone().multiplyScalar(scaledDeltaTime));
+            
+            // Update geometry
+            const positions = this.particleSystem.geometry.attributes.position.array;
+            positions[i * 3] = particle.position.x;
+            positions[i * 3 + 1] = particle.position.y;
+            positions[i * 3 + 2] = particle.position.z;
+            
             // Handle moon collisions first (priority over planet)
             if (distanceToMoon < this.parameters.moonRadius) {
                 const normal = toMoon.normalize();
