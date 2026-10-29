@@ -37,7 +37,8 @@ export class FluidSimulator {
             surfaceTensionStrength: 0.8,    // Strength of surface tension between particles
             surfaceTensionRadius: 1.0,      // Radius within which particles affect each other
             cohesionStrength: 0.5,          // Strength of particle cohesion
-            tensionResistance: 0.3          // Resistance to stretching/separation
+            tensionResistance: 0.3,         // Resistance to stretching/separation
+            pressureStrength: 4.0           // Short-range repulsion that keeps particles from overlapping
         };
 
         // Clone default parameters for current use
@@ -49,6 +50,7 @@ export class FluidSimulator {
         this.initializeParticles();
 
         this.frameCount = 0;
+        this.maxSubstep = 0.016;
         this._tempVec1 = new THREE.Vector3();
         this._tempVec2 = new THREE.Vector3();
         this._tempVec3 = new THREE.Vector3();
@@ -140,14 +142,16 @@ export class FluidSimulator {
         // Calculate the area of planet surface to cover based on fluidSpread
         const maxPhi = Math.PI * this.parameters.fluidSpread;
         const phiStart = (Math.PI - maxPhi) / 2; // Center the fluid coverage
+        const cosStart = Math.cos(phiStart);
+        const cosEnd = Math.cos(phiStart + maxPhi);
 
         for (let i = 0; i < this.parameters.particleCount; i++) {
-            // Generate evenly distributed spherical coordinates
+            // Sample cos(phi) uniformly so particles are evenly spread over the sphere's area
             const theta = Math.random() * 2 * Math.PI;  // Longitude (0 to 2π)
-            const phi = phiStart + (Math.random() * maxPhi);  // Latitude (controlled by fluidSpread)
-            
-            // Calculate position exactly at planet surface + fluidHeight
-            const radius = this.parameters.planetRadius + this.parameters.fluidHeight;
+            const phi = Math.acos(cosEnd + Math.random() * (cosStart - cosEnd));  // Latitude (controlled by fluidSpread)
+
+            // Fill the shell between the planet surface and surface + fluidHeight
+            const radius = this.parameters.planetRadius + Math.random() * this.parameters.fluidHeight;
             const x = radius * Math.sin(phi) * Math.cos(theta);
             const y = radius * Math.sin(phi) * Math.sin(theta);
             const z = radius * Math.cos(phi);
@@ -198,15 +202,24 @@ export class FluidSimulator {
         this.moon.rotation.y = this.parameters.moonRotationAngle;
 
         // Update moon orbital position
-        if (this.frameCount % 3 === 0) {
-            const currentAngle = Math.atan2(this.moon.position.z, this.moon.position.x);
-            const newAngle = currentAngle + this.parameters.moonOrbitalSpeed * deltaTime * 3;
-            this.updateMoonPosition(newAngle);
+        const currentAngle = Math.atan2(this.moon.position.z, this.moon.position.x);
+        this.updateMoonPosition(currentAngle + this.parameters.moonOrbitalSpeed * deltaTime);
+
+        // Split large time steps so high time scales stay numerically stable
+        const substeps = Math.max(1, Math.ceil(deltaTime / this.maxSubstep));
+        for (let step = 0; step < substeps; step++) {
+            this.stepParticles(deltaTime / substeps);
         }
 
+        this.particleSystem.geometry.attributes.position.needsUpdate = true;
+        this.frameCount = (this.frameCount || 0) + 1;
+    }
+
+    stepParticles(deltaTime) {
         // Optimize neighborhood calculation using spatial partitioning
         const positions = this.particleSystem.geometry.attributes.position.array;
-        const gridSize = this.parameters.surfaceTensionRadius;
+        const interactionRadius = this.parameters.surfaceTensionRadius;
+        const gridSize = interactionRadius;
         const spatialGrid = new Map();
         
         // First pass: Build spatial grid
@@ -223,9 +236,17 @@ export class FluidSimulator {
             spatialGrid.get(gridKey).push(i);
         }
 
-        // Second pass: Update particles
-        const scaledDeltaTime = deltaTime * 0.08;
-        
+        // The planet is held fixed, so subtract the moon's pull on the planet's centre from its
+        // pull on each particle. What remains is the tidal force, which raises the two bulges
+        // facing toward and away from the moon instead of dragging all the fluid to one side.
+        const moonPullOnPlanet = this.calculateGravitationalForce(this.planet.position, this.parameters.moonMass, this.moon.position, 5.0);
+
+        // Second pass: Accumulate forces from the current positions of every particle
+        const forces = this._forces && this._forces.length === this.particles.length
+            ? this._forces
+            : (this._forces = this.particles.map(() => new THREE.Vector3()));
+        const viscosityBlend = Math.min(0.5, this.parameters.viscosity * 0.05);
+
         for (let i = 0; i < this.particles.length; i++) {
             const particle = this.particles[i];
             
@@ -249,7 +270,7 @@ export class FluidSimulator {
                             const neighbor = this.particles[j];
                             const distance = particle.position.distanceTo(neighbor.position);
                             
-                            if (distance < this.parameters.surfaceTensionRadius) {
+                            if (distance > 0 && distance < interactionRadius) {
                                 neighbors.push({ particle: neighbor, distance });
                             }
                         }
@@ -257,62 +278,131 @@ export class FluidSimulator {
                 }
             }
 
-            // Calculate forces (reuse vectors to reduce garbage collection)
-            const toPlanet = this._tempVec1 || (this._tempVec1 = new THREE.Vector3());
-            const toMoon = this._tempVec2 || (this._tempVec2 = new THREE.Vector3());
-            
-            toPlanet.copy(this.planet.position).sub(particle.position);
-            toMoon.copy(this.moon.position).sub(particle.position);
-            
-            const distanceToPlanet = toPlanet.length();
-            const distanceToMoon = toMoon.length();
-            
             // Calculate gravitational forces
-            const totalForce = this.calculateGravitationalForce(particle.position, this.parameters.planetMass, this.planet.position, 1.0);
+            const totalForce = forces[i];
+            totalForce.copy(this.calculateGravitationalForce(particle.position, this.parameters.planetMass, this.planet.position, 1.0));
             totalForce.add(this.calculateGravitationalForce(particle.position, this.parameters.moonMass, this.moon.position, 5.0));
-            
-            // Add surface tension and cohesion only if we have neighbors
+            totalForce.sub(moonPullOnPlanet);
+
+            // Add pressure, surface tension, cohesion and viscosity only if we have neighbors
             if (neighbors.length > 0) {
-                const centerOfMass = this._tempVec3 || (this._tempVec3 = new THREE.Vector3());
+                const centerOfMass = this._tempVec3;
+                const averageVelocity = this._tempVec1;
                 centerOfMass.set(0, 0, 0);
-                
+                averageVelocity.set(0, 0, 0);
+
                 for (const {particle: neighbor, distance} of neighbors) {
                     centerOfMass.add(neighbor.position);
-                    
-                    // Simplified tension forces
-                    const direction = this._tempVec4 || (this._tempVec4 = new THREE.Vector3());
-                    direction.copy(neighbor.position).sub(particle.position).normalize();
-                    direction.multiplyScalar((1 - distance / this.parameters.surfaceTensionRadius) * 
-                                          this.parameters.surfaceTensionStrength);
-                    totalForce.add(direction);
+                    averageVelocity.add(neighbor.velocity);
+
+                    // Tension pulls neighbors together; pressure pushes apart particles that get
+                    // too close, which keeps the fluid from collapsing into clumps
+                    const closeness = 1 - distance / interactionRadius;
+                    const tension = closeness * this.parameters.surfaceTensionStrength;
+                    const pressure = closeness * closeness * this.parameters.pressureStrength;
+                    const direction = this._tempVec4;
+                    direction.copy(neighbor.position).sub(particle.position).divideScalar(distance);
+                    totalForce.addScaledVector(direction, tension - pressure);
                 }
-                
+
                 // Add cohesion force
                 centerOfMass.divideScalar(neighbors.length)
                            .sub(particle.position)
                            .multiplyScalar(this.parameters.cohesionStrength);
                 totalForce.add(centerOfMass);
+
+                // Viscosity: pull velocity toward the local average velocity
+                averageVelocity.divideScalar(neighbors.length).sub(particle.velocity);
+                totalForce.addScaledVector(averageVelocity, viscosityBlend / Math.max(deltaTime, 1e-6));
             }
-            
-            // Update physics
-            particle.velocity.add(totalForce.multiplyScalar(scaledDeltaTime));
+        }
+
+        // Third pass: Integrate and resolve collisions
+        const planetSurface = this.parameters.planetRadius;
+        const moonSurface = this.parameters.moonRadius;
+
+        for (let i = 0; i < this.particles.length; i++) {
+            const particle = this.particles[i];
+
+            // Particles resting on a surface get a normal force that cancels the inward push
+            const onPlanet = this.applyContactForce(particle, forces[i], this.planet.position, planetSurface);
+            const onMoon = this.applyContactForce(particle, forces[i], this.moon.position, moonSurface);
+
+            // Semi-implicit Euler: velocity first, then position from the new velocity
+            particle.velocity.addScaledVector(forces[i], deltaTime);
             particle.velocity.multiplyScalar(0.995); // Damping
-            particle.position.add(particle.velocity.multiplyScalar(scaledDeltaTime));
-            
-            // Simple collision response
-            if (distanceToMoon < this.parameters.moonRadius || 
-                distanceToPlanet < this.parameters.planetRadius + this.parameters.fluidHeight) {
-                particle.velocity.multiplyScalar(-0.5);
-            }
-            
+            particle.position.addScaledVector(particle.velocity, deltaTime);
+
+            // Resting particles slide along the surface instead of drifting off it
+            if (onPlanet) this.keepOnSurface(particle, this.planet.position, planetSurface);
+            if (onMoon) this.keepOnSurface(particle, this.moon.position, moonSurface);
+
+            this.resolveCollision(particle, this.planet.position, planetSurface);
+            this.resolveCollision(particle, this.moon.position, moonSurface);
+
             // Update particle position in geometry
             positions[i * 3] = particle.position.x;
             positions[i * 3 + 1] = particle.position.y;
             positions[i * 3 + 2] = particle.position.z;
         }
+    }
 
-        this.particleSystem.geometry.attributes.position.needsUpdate = true;
-        this.frameCount = (this.frameCount || 0) + 1;
+    // Without this, gravity drives resting particles into the surface every step and pushing
+    // them back out radially pumps energy into their sideways motion
+    applyContactForce(particle, force, bodyPosition, bodyRadius) {
+        const normal = this._tempVec2.copy(particle.position).sub(bodyPosition);
+        const distance = normal.length();
+        if (distance === 0 || distance > bodyRadius * 1.001) return false;
+        normal.divideScalar(distance);
+
+        // A net outward force lifts the particle off the surface
+        const inwardForce = force.dot(normal);
+        if (inwardForce >= 0) return false;
+
+        force.addScaledVector(normal, -inwardForce);
+        const inwardSpeed = particle.velocity.dot(normal);
+        if (inwardSpeed < 0) {
+            particle.velocity.addScaledVector(normal, -inwardSpeed);
+        }
+        return true;
+    }
+
+    // Snap a sliding particle back onto the surface and turn its velocity to follow the
+    // curvature, keeping its speed so the projection neither adds nor removes energy
+    keepOnSurface(particle, bodyPosition, bodyRadius) {
+        const normal = this._tempVec2.copy(particle.position).sub(bodyPosition);
+        const distance = normal.length();
+        if (distance === 0) return;
+        normal.divideScalar(distance);
+
+        particle.position.copy(bodyPosition).addScaledVector(normal, bodyRadius);
+
+        const speed = particle.velocity.length();
+        particle.velocity.addScaledVector(normal, -particle.velocity.dot(normal));
+        const tangentialSpeed = particle.velocity.length();
+        if (tangentialSpeed > 0) {
+            particle.velocity.multiplyScalar(speed / tangentialSpeed);
+        }
+    }
+
+    // Push a particle that ended up inside a body back onto its surface and
+    // remove the velocity component pointing into the body
+    resolveCollision(particle, bodyPosition, bodyRadius) {
+        const normal = this._tempVec2.copy(particle.position).sub(bodyPosition);
+        const distance = normal.length();
+        if (distance >= bodyRadius) return;
+
+        if (distance > 0) {
+            normal.divideScalar(distance);
+        } else {
+            normal.set(0, 1, 0);
+        }
+        particle.position.copy(bodyPosition).addScaledVector(normal, bodyRadius);
+
+        const inwardSpeed = particle.velocity.dot(normal);
+        if (inwardSpeed < 0) {
+            particle.velocity.addScaledVector(normal, -inwardSpeed);
+        }
     }
 
     calculateGravitationalForce(particlePos, bodyMass, bodyPos, multiplier = 1.0) {
@@ -341,49 +431,14 @@ export class FluidSimulator {
                 this.orbitLine.geometry.dispose();
                 this.orbitLine.geometry = this.createOrbitLine().geometry;
             }
-            else if (['planetRadius'].includes(name)) {
+            else if (name === 'planetRadius') {
+                this.planet.geometry.dispose();
                 this.planet.geometry = new THREE.SphereGeometry(this.parameters.planetRadius, 32, 32);
-                
-                // Instead of full reinitialization, adjust particle positions relative to new radius
-                const radiusRatio = this.parameters.planetRadius / (this.parameters.planetRadius - value);
-                const positions = this.particleSystem.geometry.attributes.position.array;
-                
-                for (let i = 0; i < this.particles.length; i++) {
-                    const particle = this.particles[i];
-                    
-                    // Calculate new position maintaining relative height above surface
-                    const direction = particle.position.clone().normalize();
-                    const newRadius = this.parameters.planetRadius + this.parameters.fluidHeight;
-                    particle.position.copy(direction.multiplyScalar(newRadius));
-                    
-                    // Update geometry
-                    positions[i * 3] = particle.position.x;
-                    positions[i * 3 + 1] = particle.position.y;
-                    positions[i * 3 + 2] = particle.position.z;
-                    
-                    // Maintain current velocity direction but scale magnitude
-                    if (particle.velocity) {
-                        particle.velocity.multiplyScalar(0.5); // Dampen velocities during radius change
-                    }
-                }
-                
-                this.particleSystem.geometry.attributes.position.needsUpdate = true;
+                // Re-seed the fluid on the resized surface
+                this.rebuildParticles();
             }
-            else if (name === 'particleCount') {
-                // Clean up old particle system
-                if (this.particleSystem) {
-                    this.particleSystem.geometry.dispose();
-                    this.particleSystem.material.dispose();
-                }
-                
-                // Reinitialize particles with new count
-                this.initializeParticles();
-                
-                // Make sure the scene gets updated with the new particle system
-                // We need to emit an event or notify the main app to update the scene
-                if (this.onParticleSystemUpdate) {
-                    this.onParticleSystemUpdate(this.particleSystem);
-                }
+            else if (['particleCount', 'fluidHeight', 'fluidSpread'].includes(name)) {
+                this.rebuildParticles();
             }
             // Reset rotation angles when speeds are changed to zero
             else if (name === 'planetRotationSpeed' && value === 0) {
@@ -425,27 +480,36 @@ export class FluidSimulator {
         return tangent;
     }
 
-    resetToDefault() {
-        // Reset moon position
-        this.updateMoonPosition(this.defaultParameters.moonInitialAngle);
-        
-        // Reset all parameters to defaults
-        Object.entries(this.defaultParameters).forEach(([key, value]) => {
-            this.setParameter(key, value);
-        });
-        
-        // Reset particle system to initial state
+    // Replace the particle system with a fresh one and hand it to the scene
+    rebuildParticles() {
         if (this.particleSystem) {
             this.particleSystem.geometry.dispose();
             this.particleSystem.material.dispose();
         }
-        
-        // Reinitialize particles with default configuration
+
         this.initializeParticles();
-        
-        // Notify main app about the new particle system
+
         if (this.onParticleSystemUpdate) {
             this.onParticleSystemUpdate(this.particleSystem);
         }
+    }
+
+    resetToDefault() {
+        // Reset all parameters to defaults
+        this.parameters = { ...this.defaultParameters };
+
+        // Rebuild bodies to match the default sizes
+        this.planet.geometry.dispose();
+        this.planet.geometry = new THREE.SphereGeometry(this.parameters.planetRadius, 32, 32);
+        this.planet.rotation.y = 0;
+        this.moon.geometry.dispose();
+        this.moon.geometry = new THREE.SphereGeometry(this.parameters.moonRadius, 32, 32);
+        this.moon.rotation.y = 0;
+        this.updateMoonPosition(this.parameters.moonInitialAngle);
+        this.orbitLine.geometry.dispose();
+        this.orbitLine.geometry = this.createOrbitLine().geometry;
+
+        // Reinitialize particles with default configuration
+        this.rebuildParticles();
     }
 }
