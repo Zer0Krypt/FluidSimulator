@@ -232,36 +232,14 @@ export class UIController {
         this.isPlaying = !this.isPlaying;
         const button = document.getElementById('play-pause');
         button.textContent = this.isPlaying ? 'Pause' : 'Play';
-        
-        // Update simulator and animation state
-        this.app.fluidSimulator.setParameter('timeScale', this.isPlaying ? 1.0 : 0.0);
-        this.app.toggleAnimation(this.isPlaying);
     }
 
     resetSimulation() {
-        // Pause simulation during reset
-        const wasPlaying = this.isPlaying;
-        if (wasPlaying) {
-            this.toggleSimulation();
-        }
-        
-        // Reset all controls to their default values
-        Object.entries(this.app.fluidSimulator.parameters).forEach(([name, value]) => {
-            const control = document.querySelector(`input[data-param="${name}"]`);
-            if (control && control.dataset.default) {
-                const defaultValue = parseFloat(control.dataset.default);
-                this.app.fluidSimulator.setParameter(name, defaultValue);
-                this.updateControlValue(name, defaultValue);
-            }
-        });
-        
-        // Reset particles to initial state
+        // Reset the simulator, then show the default values in the controls
         this.app.fluidSimulator.resetToDefault();
-        
-        // Resume if it was playing
-        if (wasPlaying) {
-            this.toggleSimulation();
-        }
+        Object.entries(this.app.fluidSimulator.parameters).forEach(([name, value]) => {
+            this.updateControlValue(name, value);
+        });
     }
 
     loadScenario(seed) {
@@ -281,7 +259,7 @@ export class UIController {
                 });
                 
                 // Reset simulation with new parameters
-                this.app.fluidSimulator.initializeParticles();
+                this.app.fluidSimulator.rebuildParticles();
                 
                 // Resume if it was playing
                 if (wasPlaying) {

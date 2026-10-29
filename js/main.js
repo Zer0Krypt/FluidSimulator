@@ -7,16 +7,15 @@ import { UIController } from './UIController.js';
 class SimulationApp {
     constructor() {
         this.scene = new THREE.Scene();
-        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000000);
+        // The control panel takes 300px, so the canvas is narrower than the window
+        this.camera = new THREE.PerspectiveCamera(75, (window.innerWidth - 300) / window.innerHeight, 0.1, 1000000);
         this.renderer = new THREE.WebGLRenderer({
             canvas: document.getElementById('simulation-canvas'),
             antialias: true
         });
         
         this.fluidSimulator = new FluidSimulator();
-        // Set initial timeScale to 0 to pause simulation
-        this.fluidSimulator.setParameter('timeScale', 0.0);
-        
+
         // Add handler for particle system updates
         this.fluidSimulator.onParticleSystemUpdate = (newParticleSystem) => {
             // Remove old particle system if it exists
@@ -30,10 +29,7 @@ class SimulationApp {
         
         this.scenarioManager = new ScenarioManager();
         this.uiController = new UIController(this);
-        
-        // Add particle system to the scene
-        this.scene.add(this.fluidSimulator.getParticleSystem());
-        
+
         this.init();
     }
 
@@ -91,16 +87,14 @@ class SimulationApp {
         // Use RAF ID to potentially cancel animation
         this.animationId = requestAnimationFrame(() => this.animate());
         
-        // Only update if simulation is actually running
-        if (this.fluidSimulator.parameters.timeScale > 0) {
+        // Only step the physics while playing; keep rendering so the camera still works when paused
+        if (this.uiController.isPlaying) {
             this.fluidSimulator.update();
         }
-        
-        // Only update controls if they're being used
-        if (this.controls.enabled && this.controls.isDragging) {
-            this.controls.update();
-        }
-        
+
+        // Damped orbit controls need an update every frame
+        this.controls.update();
+
         this.renderer.render(this.scene, this.camera);
     }
 
@@ -108,16 +102,6 @@ class SimulationApp {
         this.camera.aspect = (window.innerWidth - 300) / window.innerHeight;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(window.innerWidth - 300, window.innerHeight);
-    }
-
-    // Add method to pause/resume animation
-    toggleAnimation(isPlaying) {
-        if (!isPlaying && this.animationId) {
-            cancelAnimationFrame(this.animationId);
-            this.animationId = null;
-        } else if (isPlaying && !this.animationId) {
-            this.animate();
-        }
     }
 }
 
